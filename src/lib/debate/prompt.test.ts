@@ -8,7 +8,7 @@ import {
   turnKindFor,
   type Speaker,
 } from "./prompt";
-import { styleSentence, toneSentence, stanceOf, STYLE_PRESETS } from "./traits";
+import { CUSTOM_TRAIT, styleSentence, submittedTrait, toneSentence, stanceOf, STYLE_PRESETS } from "./traits";
 
 const ada: Speaker = { id: "a", name: "Ada", persona: "An urban planner.", style: "analytical", tone: "formal", stance: "contrarian" };
 const bram: Speaker = { id: "b", name: "Bram", persona: "A taxi driver.", style: "quotes old proverbs", tone: "dry", stance: "agreeable" };
@@ -159,5 +159,19 @@ describe("resolveSettings and callSettings", () => {
     const s = callSettings("ollama", "llama3.2", { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
     expect(s.providerOptions?.ollama?.options).toEqual({ temperature: 0.7, num_predict: 220, stop: ["\nBram:"] });
     expect(s.stopSequences).toBeUndefined();
+  });
+});
+
+describe("submittedTrait", () => {
+  const form = (entries: Record<string, string>) => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(entries)) fd.set(k, v);
+    return fd;
+  };
+
+  it("uses the chosen preset, or the owner's own text for 'Write your own…'", () => {
+    expect(submittedTrait(form({ styleChoice: "socratic", styleCustom: "ignored" }), "style")).toBe("socratic");
+    expect(submittedTrait(form({ toneChoice: CUSTOM_TRAIT, toneCustom: "cheerfully blunt" }), "tone")).toBe("cheerfully blunt");
+    expect(submittedTrait(form({ style: "dry" }), "style")).toBe("dry"); // older forms
   });
 });

@@ -11,6 +11,7 @@ import { agents } from "@/lib/db/schema";
 import { isAgentNameTaken, nameTakenMessage } from "@/lib/agent-names";
 import { deleteAgent, isUniqueViolation, LifecycleError } from "@/lib/debate/lifecycle";
 import { agentSchema } from "@/lib/validation/agent";
+import { submittedTrait } from "@/lib/debate/traits";
 import { pickValues, type FormValues } from "@/lib/form-values";
 import { z } from "zod";
 
@@ -21,7 +22,19 @@ export type AgentFormState = {
   values?: FormValues;
 };
 
-const AGENT_FIELDS = ["name", "persona", "style", "tone", "stance", "model", "creativity", "turnLength", "visibility"] as const;
+const AGENT_FIELDS = [
+  "name",
+  "persona",
+  "styleChoice",
+  "styleCustom",
+  "toneChoice",
+  "toneCustom",
+  "stance",
+  "model",
+  "creativity",
+  "turnLength",
+  "visibility",
+] as const;
 
 /** Creates or updates an agent from the agent form. */
 export async function saveAgent(_prev: AgentFormState, formData: FormData): Promise<AgentFormState> {
@@ -34,8 +47,8 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
   const parsed = agentSchema.safeParse({
     name: formData.get("name"),
     persona: formData.get("persona"),
-    style: formData.get("style"),
-    tone: formData.get("tone"),
+    style: submittedTrait(formData, "style"),
+    tone: submittedTrait(formData, "tone"),
     stance: formData.get("stance"),
     provider,
     modelId: modelParts.join("::"),

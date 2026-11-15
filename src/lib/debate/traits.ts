@@ -5,6 +5,19 @@
 
 export const CUSTOM_TRAIT_MAX_LENGTH = 80;
 
+/** The agent form's "Write your own…" choice for style and tone (never a preset key). */
+export const CUSTOM_TRAIT = "__custom";
+
+/**
+ * The style or tone the agent form submitted: the chosen preset, or the owner's own text when
+ * "Write your own…" was picked. Falls back to a plain `<name>` field (older forms).
+ */
+export function submittedTrait(formData: FormData, name: "style" | "tone"): string {
+  const choice = formData.get(`${name}Choice`);
+  if (typeof choice !== "string") return String(formData.get(name) ?? "");
+  return choice === CUSTOM_TRAIT ? String(formData.get(`${name}Custom`) ?? "") : choice;
+}
+
 export const STYLE_PRESETS = {
   socratic: "You argue by asking pointed questions that expose weaknesses in other people's reasoning.",
   analytical: "You argue methodically, breaking claims into parts and weighing evidence.",
@@ -20,6 +33,23 @@ export const TONE_PRESETS = {
   sarcastic: "Your tone is sarcastic and sharp, but never abusive.",
   warm: "Your tone is warm and generous towards the others.",
 } as const satisfies Record<string, string>;
+
+/** One-line descriptions shown in the agent form under the Style and Tone pickers. */
+export const STYLE_DESCRIPTIONS: Record<keyof typeof STYLE_PRESETS, string> = {
+  socratic: "Asks pointed questions that expose weak reasoning.",
+  analytical: "Breaks claims into parts and weighs the evidence.",
+  storyteller: "Argues through examples, anecdotes and stories.",
+  pragmatic: "Focuses on what works, what it costs and who it affects.",
+  passionate: "Argues with conviction, appealing to values and emotions.",
+};
+
+export const TONE_DESCRIPTIONS: Record<keyof typeof TONE_PRESETS, string> = {
+  formal: "Formal and measured.",
+  casual: "Casual and conversational.",
+  dry: "Dry and understated, with deadpan wit.",
+  sarcastic: "Sarcastic and sharp, but never abusive.",
+  warm: "Warm and generous towards the others.",
+};
 
 export const STANCE_PRESETS = {
   contrarian: {

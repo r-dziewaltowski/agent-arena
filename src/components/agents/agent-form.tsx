@@ -1,16 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { saveAgent, type AgentFormState } from "@/actions/agents";
 import { Button, Field, inputClass, Notice, cx } from "@/components/ui";
 import type { ModelGroup } from "@/lib/ai/model-options";
 import {
   CREATIVITY_LABELS,
   CREATIVITY_LEVELS,
+  CUSTOM_TRAIT,
+  CUSTOM_TRAIT_MAX_LENGTH,
   STANCE_PRESETS,
   STANCES,
-  STYLE_PRESETS,
-  TONE_PRESETS,
+  STYLE_DESCRIPTIONS,
+  TONE_DESCRIPTIONS,
   TURN_LENGTH_LABELS,
   TURN_LENGTHS,
   traitLabel,
@@ -97,26 +99,26 @@ export function AgentForm({
       </Field>
 
       <div className="grid gap-6 sm:grid-cols-3">
-        <Field label="Style" error={e.style} hint="How it argues. Pick a suggestion or write your own.">
-          <input name="style" list="style-presets" defaultValue={val("style", initial.style)} maxLength={80} required className={inputClass} />
-          <datalist id="style-presets">
-            {Object.keys(STYLE_PRESETS).map((k) => (
-              <option key={k} value={k}>
-                {traitLabel(k)}
-              </option>
-            ))}
-          </datalist>
-        </Field>
-        <Field label="Tone" error={e.tone} hint="How it sounds. Pick a suggestion or write your own.">
-          <input name="tone" list="tone-presets" defaultValue={val("tone", initial.tone)} maxLength={80} required className={inputClass} />
-          <datalist id="tone-presets">
-            {Object.keys(TONE_PRESETS).map((k) => (
-              <option key={k} value={k}>
-                {traitLabel(k)}
-              </option>
-            ))}
-          </datalist>
-        </Field>
+        <TraitPicker
+          name="style"
+          label="Style"
+          descriptions={STYLE_DESCRIPTIONS}
+          customHint="How it argues, in a few words."
+          customPlaceholder="e.g. asks pointed questions"
+          stored={initial.style}
+          sent={sent}
+          error={e.style}
+        />
+        <TraitPicker
+          name="tone"
+          label="Tone"
+          descriptions={TONE_DESCRIPTIONS}
+          customHint="How it sounds, in a few words."
+          customPlaceholder="e.g. cheerfully blunt"
+          stored={initial.tone}
+          sent={sent}
+          error={e.tone}
+        />
         <Field label="Stance" error={e.stance} hint="How it treats the other speakers.">
           <select name="stance" defaultValue={val("stance", initial.stance)} className={inputClass}>
             {STANCES.map((s) => (
@@ -157,6 +159,69 @@ export function AgentForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Style or tone: a dropdown of presets (shown by name, with a one-line description underneath)
+ * plus "Write your own…", which reveals a short text box. The form sends `<name>Choice` and
+ * `<name>Custom`; the server turns them into the stored value (a preset key or the custom text).
+ */
+function TraitPicker({
+  name,
+  label,
+  descriptions,
+  customHint,
+  customPlaceholder,
+  stored,
+  sent,
+  error,
+}: {
+  name: "style" | "tone";
+  label: string;
+  descriptions: Record<string, string>;
+  customHint: string;
+  customPlaceholder: string;
+  /** The agent's saved value: a preset key or custom text. */
+  stored: string;
+  /** What was submitted, after a rejected save. */
+  sent: Record<string, string>;
+  error?: string[];
+}) {
+  const isPreset = (v: string) => Object.hasOwn(descriptions, v);
+  const initialChoice = sent[`${name}Choice`] ?? (isPreset(stored) ? stored : stored ? CUSTOM_TRAIT : Object.keys(descriptions)[0]);
+  const initialCustom = sent[`${name}Custom`] ?? (isPreset(stored) ? "" : stored);
+  const [choice, setChoice] = useState(initialChoice);
+  const custom = choice === CUSTOM_TRAIT;
+
+  return (
+    <Field label={label} error={error} hint={custom ? customHint : descriptions[choice]}>
+      <select
+        name={`${name}Choice`}
+        defaultValue={initialChoice}
+        onChange={(event) => setChoice(event.target.value)}
+        className={inputClass}
+      >
+        {Object.keys(descriptions).map((key) => (
+          <option key={key} value={key}>
+            {traitLabel(key)}
+          </option>
+        ))}
+        <option value={CUSTOM_TRAIT}>Write your own…</option>
+      </select>
+      {custom && (
+        <input
+          name={`${name}Custom`}
+          defaultValue={initialCustom}
+          maxLength={CUSTOM_TRAIT_MAX_LENGTH}
+          required
+          placeholder={customPlaceholder}
+          aria-label={`Your own ${label.toLowerCase()}`}
+          className={cx(inputClass, "mt-2")}
+          autoFocus={!sent[`${name}Choice`] && !initialCustom}
+        />
+      )}
+    </Field>
   );
 }
 

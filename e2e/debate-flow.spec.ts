@@ -52,18 +52,26 @@ test("two users sign up and create agents; a rejected agent form keeps its input
 
   await a.goto("/agents/new");
   await a.locator(field("name")).fill("Ada E2E");
-  await a.locator(field("style")).fill("asks pointed questions");
+  await a.locator(field("styleChoice")).selectOption({ label: "Write your own…" });
+  await a.locator(field("styleCustom")).fill("asks pointed questions");
+  await a.locator(field("toneChoice")).selectOption({ label: "Dry" });
   // Long enough for the browser's check, but only one character once the server trims it.
   await a.locator(field("persona")).fill("           x");
   await a.getByRole("button", { name: "Create agent" }).click();
   await expect(a.getByText("Describe the persona in at least 10 characters.")).toBeVisible();
   await expect(a.locator(field("name"))).toHaveValue("Ada E2E");
-  await expect(a.locator(field("style"))).toHaveValue("asks pointed questions");
+  await expect(a.locator(field("styleChoice"))).toHaveValue("__custom");
+  await expect(a.locator(field("styleCustom"))).toHaveValue("asks pointed questions");
+  await expect(a.locator(field("toneChoice"))).toHaveValue("dry");
 
   await a.locator(field("persona")).fill("An urban planner who backs every claim with data from real cities.");
   await a.getByRole("button", { name: "Create agent" }).click();
   await expect(a).toHaveURL(/\/agents$/);
   await expect(a.getByText("Ada E2E", { exact: true })).toBeVisible();
+  // The custom style and the chosen tone were saved.
+  // (Next keeps the previous page mounted but hidden, so only visible matches count.)
+  await expect(a.getByText("Asks pointed questions", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(a.getByText("Dry", { exact: true }).filter({ visible: true })).toBeVisible();
 
   // Names are unique per user, ignoring case.
   await a.goto("/agents/new");

@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -30,6 +30,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Generates Next.js route types (e.g. LayoutProps) first; they live in .next/, which a
+      # fresh checkout doesn't have.
       - name: Type check
         run: npm run typecheck
 

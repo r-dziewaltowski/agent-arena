@@ -1,7 +1,8 @@
 import { asc, eq, inArray } from "drizzle-orm";
+import { connection } from "next/server";
 import { displayNames } from "./auth/session";
 import { getDb } from "./db/client";
-import { agents, debateParticipants, debates, turns } from "./db/schema";
+import { agents, debateParticipants, debates, turns, votes } from "./db/schema";
 
 export type DebateRow = typeof debates.$inferSelect;
 
@@ -46,6 +47,8 @@ export function toTurnView(t: typeof turns.$inferSelect): TurnView {
 
 /** Everything the debate page needs, in one place. */
 export async function loadDebateView(id: string) {
+  // Per-request data (votes, the current time for the voting window): never prerender it.
+  await connection();
   const db = await getDb();
   const [debate] = await db.select().from(debates).where(eq(debates.id, id));
   if (!debate) return null;
@@ -76,10 +79,17 @@ export async function loadDebateView(id: string) {
   });
 
   const turnRows = await db.select().from(turns).where(eq(turns.debateId, id)).orderBy(asc(turns.seq));
+  const voteRows = await db
+    .select({ participantId: votes.participantId, userId: votes.userId })
+    .from(votes)
+    .where(eq(votes.debateId, id));
   return {
     debate,
     creatorName: names.get(debate.creatorId) ?? "Someone",
     slots,
     turns: turnRows.filter((t) => t.kind !== "summary").map(toTurnView),
+    votes: voteRows,
+    /** When this view was loaded (decides whether voting is still open). */
+    loadedAt: Date.now(),
   };
 }

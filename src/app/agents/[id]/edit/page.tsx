@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { AgentForm } from "@/components/agents/agent-form";
 import { Card, Notice, PageHeader } from "@/components/ui";
 import { getModelOptions, isRetired, modelLabel } from "@/lib/ai/model-options";
-import { getCurrentUser } from "@/lib/auth/session";
+import { requireUser } from "@/lib/auth/session";
 import { getAgent, runningDebateCount } from "@/lib/queries";
 
 export default function EditAgentPage(props: PageProps<"/agents/[id]/edit">) {
@@ -19,7 +19,7 @@ export default function EditAgentPage(props: PageProps<"/agents/[id]/edit">) {
 
 async function EditAgent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [me, agent] = await Promise.all([getCurrentUser(), getAgent(id)]);
+  const [me, agent] = await Promise.all([requireUser(`/agents/${id}/edit`), getAgent(id)]);
   if (!agent || agent.ownerId !== me.id) notFound();
   const [groups, running] = await Promise.all([getModelOptions(), runningDebateCount(agent.id)]);
   return (

@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getModelOptions } from "@/lib/ai/model-options";
-import { getCurrentUser } from "@/lib/auth/session";
+import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { agents } from "@/lib/db/schema";
 import { deleteAgent, LifecycleError } from "@/lib/debate/lifecycle";
@@ -18,7 +18,7 @@ export type AgentFormState = {
 
 /** Creates or updates an agent from the agent form. */
 export async function saveAgent(_prev: AgentFormState, formData: FormData): Promise<AgentFormState> {
-  const me = await getCurrentUser();
+  const me = await requireUser();
   const db = await getDb();
   const agentId = formData.get("id") ? String(formData.get("id")) : null;
   const [provider, ...modelParts] = String(formData.get("model") ?? "").split("::");
@@ -65,7 +65,7 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
 
 /** Deletes an agent (owner or admin). */
 export async function removeAgent(formData: FormData) {
-  const me = await getCurrentUser();
+  const me = await requireUser();
   const db = await getDb();
   try {
     await deleteAgent(db, { agentId: String(formData.get("id")), userId: me.id, isAdmin: me.isAdmin });

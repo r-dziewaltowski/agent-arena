@@ -39,5 +39,9 @@ jobs:
       - name: Test
         run: npm test
 
+      # Better Auth refuses its built-in default secret in production builds. This placeholder
+      # only lets CI build; it is not used by any deployment.
       - name: Build
         run: npm run build
+        env:
+          BETTER_AUTH_SECRET: ci-build-placeholder-not-a-real-secret-0000

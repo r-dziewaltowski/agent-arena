@@ -8,15 +8,16 @@ export type Db = LibSQLDatabase<typeof schema>;
 
 export const DEFAULT_DATABASE_URL = "file:./data/arena.db";
 
+type Opened = { db: Db; client: Client; ready: Promise<void> };
+
 /**
- * Opens a database. For local files it creates the folder, enables WAL so the web app and the
- * worker can read while the other writes, and sets a busy timeout so concurrent writes wait
- * instead of failing. One connection per client keeps the per-connection PRAGMAs in effect.
+ * Creates a database handle synchronously (Better Auth needs one at import time). For local
+ * files it creates the folder, then queues the PRAGMAs: WAL so the web app and the worker can
+ * read while the other writes, a busy timeout so concurrent writes wait instead of failing, and
+ * foreign keys. One connection per client keeps those PRAGMAs in effect, and because that one
+ * connection runs statements in order, they always run before any later query.
  */
-export async function openDb(url = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL): Promise<{
-  db: Db;
-  client: Client;
-}> {
+export function createDb(url = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL): Opened {
   const isFile = url.startsWith("file:");
   if (isFile) {
     const path = url.slice("file:".length);
@@ -30,27 +31,37 @@ export async function openDb(url = process.env.DATABASE_URL ?? DEFAULT_DATABASE_
     timeout: 5000,
   });
 
-  await client.execute("PRAGMA foreign_keys = ON");
+  const pragmas = ["PRAGMA foreign_keys = ON"];
   if (isFile) {
-    await client.execute("PRAGMA journal_mode = WAL");
-    // Safe with WAL (no corruption on crash) and much faster than the default FULL.
-    await client.execute("PRAGMA synchronous = NORMAL");
-    await client.execute("PRAGMA busy_timeout = 5000");
+    pragmas.push("PRAGMA journal_mode = WAL", "PRAGMA synchronous = NORMAL", "PRAGMA busy_timeout = 5000");
   }
+  const ready = pragmas.reduce<Promise<unknown>>((p, sql) => p.then(() => client.execute(sql)), Promise.resolve()).then(
+    () => undefined,
+  );
 
-  return { db: drizzle(client, { schema }), client };
+  return { db: drizzle(client, { schema }), client, ready };
 }
 
-type Cached = { promise: Promise<{ db: Db; client: Client }> };
-const globalForDb = globalThis as unknown as { __arenaDb?: Cached };
+/** Opens a database and waits until its PRAGMAs have run (scripts and tests). */
+export async function openDb(url?: string): Promise<{ db: Db; client: Client }> {
+  const { db, client, ready } = createDb(url);
+  await ready;
+  return { db, client };
+}
+
+const globalForDb = globalThis as unknown as { __arenaDb?: Opened };
 
 /**
- * The app-wide database. Cached on globalThis so Next.js hot reloads in development
- * don't open a new connection on every change.
+ * The app-wide database. Cached on globalThis so Next.js hot reloads in development don't open
+ * a new connection on every change.
  */
-export function getDb(): Promise<Db> {
-  if (!globalForDb.__arenaDb) {
-    globalForDb.__arenaDb = { promise: openDb() };
-  }
-  return globalForDb.__arenaDb.promise.then((r) => r.db);
+export function getDbSync(): Db {
+  globalForDb.__arenaDb ??= createDb();
+  return globalForDb.__arenaDb.db;
+}
+
+export async function getDb(): Promise<Db> {
+  const db = getDbSync();
+  await globalForDb.__arenaDb!.ready;
+  return db;
 }

@@ -60,10 +60,12 @@ OLLAMA_DEFAULT_MODEL=llama3.2
 GROQ_API_KEY=
 GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
 
-# Better Auth (from M3)
+# Better Auth: a random secret of 32+ characters that signs login sessions
 BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:3000
 ```
+
+Generate the secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. In development Better Auth falls back to a built-in secret with a warning; production builds refuse to start without one.
 
 Paid models (Claude and others) arrive in M5 and run only on users' own API keys, so there is no app-wide paid key.
 
@@ -77,7 +79,7 @@ npm run dev
 
 Open http://localhost:3000. `npm run dev` applies migrations, then starts the web app and the debate worker together (their output is prefixed `[web]` and `[worker]`).
 
-Until accounts arrive, the header has a **dev user switcher** (Alice, Bob, Carol; Alice is an admin), so one browser can act as several people: create agents as two users, enter them into the same debate and watch it run.
+Create an account from the header (email and password; your display name is shown, your email never is). For local testing, `npm run db:seed-dev` creates three dev accounts, Alice (admin), Bob and Carol, with the password in `scripts/seed-dev-accounts.ts`: sign in as two of them in different browsers to enter agents into the same debate and vote. Admin rights are set by hand in the database (`user.is_admin`).
 
 ## Useful commands
 
@@ -90,6 +92,7 @@ Until accounts arrive, the header has a **dev user switcher** (Alice, Bob, Carol
 | `npm run db:generate` | Creates a migration after a schema change |
 | `npm run db:migrate` | Applies pending migrations |
 | `npm run db:studio` | Browses the database in Drizzle Studio |
+| `npm run db:seed-dev` | Creates the local dev accounts (Alice, Bob, Carol); refuses to run in production |
 
 ## Roadmap
 

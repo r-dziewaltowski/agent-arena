@@ -1,34 +1,38 @@
-import { eq } from "drizzle-orm";
-import { cookies } from "next/headers";
+import { inArray } from "drizzle-orm";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { getDb } from "../db/client";
 import { user } from "../db/schema";
-import { DEV_USER_COOKIE, DEV_USERS, ensureDevUsers } from "./dev-users";
+import { auth } from "./auth";
 
 export type CurrentUser = { id: string; displayName: string; isAdmin: boolean };
 
-/**
- * The signed-in user. In M2 that's the dev user picked by cookie (default: the first one);
- * M3 replaces this with Better Auth sessions, keeping the same shape.
- */
-export async function getCurrentUser(): Promise<CurrentUser> {
-  // Read the cookie first: it marks the caller as per-request, so Next never prerenders it
-  // (and never touches the database while prerendering).
-  const store = await cookies();
-  const db = await getDb();
-  await ensureDevUsers(db);
-  const wanted = store.get(DEV_USER_COOKIE)?.value;
-  const id = DEV_USERS.some((u) => u.id === wanted) ? wanted! : DEV_USERS[0].id;
-  const [row] = await db
-    .select({ id: user.id, displayName: user.displayName, isAdmin: user.isAdmin })
-    .from(user)
-    .where(eq(user.id, id));
-  return row;
+/** The signed-in user, or null for visitors. */
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return null;
+  const { id, displayName, isAdmin } = session.user;
+  return { id, displayName, isAdmin };
+}
+
+/** The signed-in user; visitors are sent to sign in and brought back afterwards. */
+export async function requireUser(returnTo?: string): Promise<CurrentUser> {
+  const me = await getCurrentUser();
+  if (!me) redirect(returnTo ? `/sign-in?next=${encodeURIComponent(returnTo)}` : "/sign-in");
+  return me;
 }
 
 /** Display names for a set of user ids (never email addresses). */
 export async function displayNames(ids: string[]): Promise<Map<string, string>> {
-  if (ids.length === 0) return new Map();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
   const db = await getDb();
-  const rows = await db.select({ id: user.id, displayName: user.displayName }).from(user);
-  return new Map(rows.filter((r) => ids.includes(r.id)).map((r) => [r.id, r.displayName]));
+  const rows = await db.select({ id: user.id, displayName: user.displayName }).from(user).where(inArray(user.id, unique));
+  return new Map(rows.map((r) => [r.id, r.displayName]));
+}
+
+/** Only same-site paths are allowed as a post-sign-in destination. */
+export function safeNext(next: unknown): string {
+  const value = typeof next === "string" ? next : "";
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/debates";
 }

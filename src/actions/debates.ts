@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { catalogAvailability, listOllamaModels } from "@/lib/ai/models";
-import { getCurrentUser } from "@/lib/auth/session";
+import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { createDebate, deleteDebate, enter, LifecycleError, startDebate, withdraw } from "@/lib/debate/lifecycle";
 
@@ -15,7 +15,7 @@ async function availability() {
 }
 
 export async function createDebateAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const me = await getCurrentUser();
+  const me = await requireUser();
   const db = await getDb();
   const startMode = String(formData.get("startMode"));
   const startAtRaw = formData.get("startAt");
@@ -39,7 +39,7 @@ export async function createDebateAction(_prev: FormState, formData: FormData): 
 }
 
 export async function enterAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const me = await getCurrentUser();
+  const me = await requireUser();
   const db = await getDb();
   try {
     await enter(
@@ -62,7 +62,7 @@ export async function enterAction(_prev: FormState, formData: FormData): Promise
 }
 
 export async function withdrawAction(formData: FormData) {
-  const me = await getCurrentUser();
+  const me = await requireUser();
   const db = await getDb();
   try {
     await withdraw(db, { participantId: String(formData.get("participantId")), userId: me.id });
@@ -73,7 +73,7 @@ export async function withdrawAction(formData: FormData) {
 }
 
 export async function startAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const me = await getCurrentUser();
+  const me = await requireUser();
   const db = await getDb();
   try {
     await startDebate(db, { debateId: String(formData.get("debateId")), userId: me.id }, Date.now(), await availability());
@@ -86,7 +86,7 @@ export async function startAction(_prev: FormState, formData: FormData): Promise
 }
 
 export async function deleteDebateAction(formData: FormData) {
-  const me = await getCurrentUser();
+  const me = await requireUser();
   const db = await getDb();
   try {
     await deleteDebate(db, { debateId: String(formData.get("debateId")), userId: me.id, isAdmin: me.isAdmin });

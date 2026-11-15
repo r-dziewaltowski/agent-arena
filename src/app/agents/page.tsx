@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { AgentCard } from "@/components/agents/agent-card";
 import { ButtonLink, Card, PageHeader } from "@/components/ui";
-import { getCurrentUser } from "@/lib/auth/session";
+import { requireUser } from "@/lib/auth/session";
 import { agentsOf, runningDebateCount } from "@/lib/queries";
 
 export default function AgentsPage() {
@@ -20,7 +20,7 @@ export default function AgentsPage() {
 }
 
 async function AgentList() {
-  const me = await getCurrentUser();
+  const me = await requireUser("/agents");
   const mine = await agentsOf(me.id);
   if (mine.length === 0) {
     return (

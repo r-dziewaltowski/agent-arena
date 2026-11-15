@@ -30,14 +30,16 @@ export default function DebatesPage(props: PageProps<"/debates">) {
 
 async function DebateList({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { filter: raw } = await searchParams;
-  const filter = (FILTERS.find((f) => f.value === raw)?.value ?? "all") as DebateFilter;
   const me = await getCurrentUser();
-  const debates = await listDebates(filter, me.id);
+  // "Mine" only makes sense when signed in.
+  const filters = me ? FILTERS : FILTERS.filter((f) => f.value !== "mine");
+  const filter = (filters.find((f) => f.value === raw)?.value ?? "all") as DebateFilter;
+  const debates = await listDebates(filter, me?.id ?? "");
 
   return (
     <>
       <div className="mb-4 flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
+        {filters.map((f) => (
           <Link
             key={f.value}
             href={f.value === "all" ? "/debates" : `/debates?filter=${f.value}`}

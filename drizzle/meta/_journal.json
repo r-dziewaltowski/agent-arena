@@ -15,6 +15,13 @@
       "when": 1794737886230,
       "tag": "0001_model_fallback",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794743586782,
+      "tag": "0002_auth_tables",
+      "breakpoints": true
     }
   ]
 }

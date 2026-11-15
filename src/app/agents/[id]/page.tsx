@@ -20,9 +20,10 @@ export default function AgentPage(props: PageProps<"/agents/[id]">) {
 async function AgentView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [me, agent] = await Promise.all([getCurrentUser(), getAgent(id)]);
-  const isOwner = agent?.ownerId === me.id;
+  const isOwner = !!me && agent?.ownerId === me.id;
+  const isAdmin = !!me?.isAdmin;
   // Private agents' full personas are only for their owner (and admins, for moderation).
-  if (!agent || (agent.visibility !== "public" && !isOwner && !me.isAdmin)) notFound();
+  if (!agent || (agent.visibility !== "public" && !isOwner && !isAdmin)) notFound();
   const [running, debates, names] = await Promise.all([
     runningDebateCount(agent.id),
     debatesOfAgent(agent.id),
@@ -35,7 +36,7 @@ async function AgentView({ params }: { params: Promise<{ id: string }> }) {
       <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
         <div className="space-y-4">
           <AgentCard agent={agent} runningDebates={running} canManage={isOwner} />
-          {me.isAdmin && !isOwner && (
+          {isAdmin && !isOwner && (
             <form action={removeAgent}>
               <input type="hidden" name="id" value={agent.id} />
               <input type="hidden" name="redirectTo" value="/debates" />

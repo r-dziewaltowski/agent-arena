@@ -8,6 +8,7 @@ import { Countdown } from "@/components/debates/countdown";
 import { LiveDebate } from "@/components/debates/live-debate";
 import { EnterSlotForm, StartForm } from "@/components/debates/lobby-forms";
 import { StatusBadge } from "@/components/debates/status-badge";
+import { VotePanel } from "@/components/debates/vote-panel";
 import { Badge, Button, ButtonLink, Card, Notice } from "@/components/ui";
 import { modelLabel } from "@/lib/ai/model-options";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
@@ -33,8 +34,8 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [me, view] = await Promise.all([getCurrentUser(), loadDebateView(id)]);
   if (!view) notFound();
-  const { debate, slots, turns, creatorName } = view;
-  const isCreator = debate.creatorId === me.id;
+  const { debate, slots, turns, votes, creatorName, loadedAt } = view;
+  const isCreator = !!me && debate.creatorId === me.id;
 
   return (
     <div className="space-y-6">
@@ -75,16 +76,14 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
               />
             )}
             {debate.status === "completed" && (
-              <Card className="mt-6 text-sm text-zinc-600 dark:text-zinc-400">
-                The debate is over. Voting arrives with accounts in the next milestone.
-              </Card>
+              <VotePanel debate={debate} slots={slots} votes={votes} viewerId={me?.id ?? null} now={loadedAt} />
             )}
           </div>
           <Participants slots={slots} />
         </div>
       )}
 
-      {me.isAdmin && debate.status !== "open" && (
+      {me?.isAdmin && debate.status !== "open" && (
         <form action={deleteDebateAction}>
           <input type="hidden" name="debateId" value={debate.id} />
           <ConfirmButton variant="danger" message="Delete this debate as admin? Its transcript and votes are removed for good.">
@@ -139,18 +138,18 @@ async function Lobby({
 }: {
   debate: DebateRow;
   slots: SlotEntry[];
-  me: CurrentUser;
+  me: CurrentUser | null;
   isCreator: boolean;
 }) {
-  const myAgents = await agentsOf(me.id);
+  const myAgents = me ? await agentsOf(me.id) : [];
   const enteredAgentIds = new Set(slots.map((s) => s.agentId));
-  const alreadyIn = slots.some((s) => s.userId === me.id);
+  const alreadyIn = !!me && slots.some((s) => s.userId === me.id);
   const canEnter = debate.allowMultipleEntries || !alreadyIn;
   const eligible = canEnter ? myAgents.filter((a) => !enteredAgentIds.has(a.id)) : [];
   const positions = Array.from({ length: debate.maxParticipants }, (_, i) => i + 1);
 
   let startInfo: ReactNode;
-  if (debate.startMode === "manual") startInfo = isCreator ? null : `Starts when ${isCreator ? "you start" : "the creator starts"} it.`;
+  if (debate.startMode === "manual") startInfo = isCreator ? null : "Starts when the creator starts it.";
   else if (debate.startMode === "when_full") startInfo = "Starts automatically when every slot is filled.";
   else if (debate.startAt) startInfo = <Countdown to={debate.startAt} />;
 
@@ -172,7 +171,7 @@ async function Lobby({
                     by {slot.ownerName}
                     {slot.provider && slot.modelId && <> · {modelLabel(slot.provider, slot.modelId)}</>}
                   </p>
-                  {slot.userId === me.id && (
+                  {slot.userId === me?.id && (
                     <form action={withdrawAction} className="mt-auto pt-2">
                       <input type="hidden" name="participantId" value={slot.participantId} />
                       <Button type="submit" variant="secondary">
@@ -186,7 +185,11 @@ async function Lobby({
               ) : (
                 <p className="text-sm text-zinc-500">
                   Empty.{" "}
-                  {myAgents.length === 0 ? (
+                  {!me ? (
+                    <Link href={`/sign-in?next=/debates/${debate.id}`} className="text-indigo-600 hover:underline">
+                      Sign in to enter an agent
+                    </Link>
+                  ) : myAgents.length === 0 ? (
                     <Link href="/agents/new" className="text-indigo-600 hover:underline">
                       Create an agent
                     </Link>
@@ -213,7 +216,7 @@ async function Lobby({
           </form>
         </div>
       )}
-      {!isCreator && me.isAdmin && (
+      {!isCreator && me?.isAdmin && (
         <form action={deleteDebateAction}>
           <input type="hidden" name="debateId" value={debate.id} />
           <ConfirmButton variant="danger" message="Delete this debate as admin?">

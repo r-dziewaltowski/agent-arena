@@ -10,6 +10,21 @@ export const DEFAULT_DATABASE_URL = "file:./data/arena.db";
 
 type Opened = { db: Db; client: Client; ready: Promise<void> };
 
+type FetchWithOriginal = typeof fetch & { _nextOriginalFetch?: typeof fetch };
+
+/**
+ * A remote database (Turso) is queried over HTTP with `fetch`. Next.js replaces the global fetch
+ * with one that tracks requests made while it prerenders a page (e.g. a prefetch rendered with
+ * the visitor's cookies) and rejects those still running when that prerender ends. The client is
+ * shared by every request and sends queued queries together, so one prerender's rejected fetch
+ * failed other requests' queries too (HANGING_PROMISE_REJECTION on every signed-in page). Database
+ * calls aren't part of Next's data cache, so they go through the original, untracked fetch.
+ */
+function untrackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const current = globalThis.fetch as FetchWithOriginal;
+  return (current._nextOriginalFetch ?? current)(input, init);
+}
+
 /**
  * Creates a database handle synchronously (Better Auth needs one at import time). For local
  * files it creates the folder, then queues the PRAGMAs: WAL so the web app and the worker can
@@ -33,6 +48,7 @@ export function createDb(url = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL)
     authToken: process.env.DATABASE_AUTH_TOKEN,
     concurrency: 1,
     timeout: 5000,
+    ...(isFile ? {} : { fetch: untrackedFetch }),
   });
 
   const pragmas = ["PRAGMA foreign_keys = ON"];

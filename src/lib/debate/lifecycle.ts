@@ -25,7 +25,8 @@ export type LifecycleErrorCode =
   | "NOT_COMPLETED"
   | "VOTING_CLOSED"
   | "OWN_AGENT"
-  | "ALREADY_VOTED";
+  | "ALREADY_VOTED"
+  | "NOT_FAILED";
 
 export class LifecycleError extends Error {
   constructor(
@@ -310,6 +311,26 @@ export async function startDueScheduled(
     });
   }
   return { started, cancelled };
+}
+
+/**
+ * Puts a failed debate back to running (creator or admin), e.g. after a missing API key was
+ * added. It continues from the turn that failed; turns already written are kept.
+ */
+export async function resumeDebate(
+  db: Db,
+  args: { debateId: string; userId: string; isAdmin: boolean },
+): Promise<void> {
+  const debate = await loadDebate(db, args.debateId);
+  if (!args.isAdmin && debate.creatorId !== args.userId) {
+    throw new LifecycleError("FORBIDDEN", "Only the creator can resume this debate.");
+  }
+  const rows = await db
+    .update(debates)
+    .set({ status: "running", errorMessage: null, retryCount: 0, waitAttempts: 0, nextAttemptAt: null, waitingReason: null })
+    .where(and(eq(debates.id, args.debateId), eq(debates.status, "failed")))
+    .returning({ id: debates.id });
+  if (rows.length === 0) throw new LifecycleError("NOT_FAILED", "Only a failed debate can be resumed.");
 }
 
 /** Creators may delete their debate while it is open; admins may delete any debate at any time. */

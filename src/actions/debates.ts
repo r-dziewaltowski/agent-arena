@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { catalogAvailability, listOllamaModels } from "@/lib/ai/models";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
-import { createDebate, deleteDebate, enter, LifecycleError, startDebate, withdraw } from "@/lib/debate/lifecycle";
+import { createDebate, deleteDebate, enter, LifecycleError, resumeDebate, startDebate, withdraw } from "@/lib/debate/lifecycle";
 
 export type FormState = { message?: string; errors?: Partial<Record<string, string[]>> };
 
@@ -83,6 +83,17 @@ export async function startAction(_prev: FormState, formData: FormData): Promise
   }
   refresh();
   return {};
+}
+
+export async function resumeDebateAction(formData: FormData) {
+  const me = await requireUser();
+  const db = await getDb();
+  try {
+    await resumeDebate(db, { debateId: String(formData.get("debateId")), userId: me.id, isAdmin: me.isAdmin });
+  } catch (err) {
+    if (!(err instanceof LifecycleError)) throw err;
+  }
+  refresh();
 }
 
 export async function deleteDebateAction(formData: FormData) {

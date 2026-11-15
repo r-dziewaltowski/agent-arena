@@ -17,6 +17,17 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
   },
+  // GitHub sign-in, switched on only when its OAuth app credentials are set.
+  socialProviders: githubEnabled()
+    ? {
+        github: {
+          clientId: process.env.GITHUB_CLIENT_ID!,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+          // Our required displayName comes from the GitHub profile name, or the username.
+          mapProfileToUser: (profile) => ({ displayName: profile.name || profile.login }),
+        },
+      }
+    : {},
   user: {
     additionalFields: {
       displayName: { type: "string", required: true },
@@ -29,3 +40,7 @@ export const auth = betterAuth({
 });
 
 export type Auth = typeof auth;
+
+export function githubEnabled(): boolean {
+  return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+}

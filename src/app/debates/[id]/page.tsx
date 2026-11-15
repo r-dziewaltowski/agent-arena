@@ -9,6 +9,7 @@ import { LiveDebate } from "@/components/debates/live-debate";
 import { EnterSlotForm, StartForm } from "@/components/debates/lobby-forms";
 import { StatusBadge } from "@/components/debates/status-badge";
 import { VotePanel } from "@/components/debates/vote-panel";
+import { FailureNotice } from "@/components/debates/failure-notice";
 import { Badge, Button, ButtonLink, Card, Notice } from "@/components/ui";
 import { modelLabel } from "@/lib/ai/model-options";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
@@ -58,10 +59,24 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
       ) : (
         <div className="grid gap-6 md:grid-cols-[1fr_16rem]">
           <div>
+            {debate.status === "failed" && (
+              <div className="mb-6">
+                <FailureNotice
+                  debateId={debate.id}
+                  errorMessage={debate.errorMessage}
+                  canManage={isCreator || !!me?.isAdmin}
+                />
+              </div>
+            )}
             {debate.status === "cancelled" ? (
-              <Notice tone="amber">This debate was cancelled. {debate.cancelReason}</Notice>
+              <Notice tone="amber">
+                <p className="font-medium">This debate was cancelled.</p>
+                <p className="mt-1">{debate.cancelReason}</p>
+              </Notice>
             ) : (
               <LiveDebate
+                // Remount when the status changes (e.g. resumed after a failure) so polling restarts.
+                key={debate.status}
                 debateId={debate.id}
                 rounds={debate.rounds}
                 speakers={slots.map((s) => ({ participantId: s.participantId, name: s.name, position: s.position }))}
@@ -69,6 +84,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                 initial={{
                   status: debate.status,
                   waitingReason: debate.waitingReason,
+                  nextAttemptAt: debate.nextAttemptAt,
                   errorMessage: debate.errorMessage,
                   totalPromptTokens: debate.totalPromptTokens,
                   totalCompletionTokens: debate.totalCompletionTokens,

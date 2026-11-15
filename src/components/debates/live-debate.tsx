@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Notice, cx } from "@/components/ui";
 import type { TurnView } from "@/lib/debate-view";
+import { Countdown } from "./countdown";
 
 type Speaker = { participantId: string; name: string; position: number };
 
 type LiveState = {
   status: string;
   waitingReason: string | null;
+  nextAttemptAt: number | null;
   errorMessage: string | null;
   totalPromptTokens: number;
   totalCompletionTokens: number;
@@ -75,6 +77,7 @@ export function LiveDebate({
           setState({
             status: data.status,
             waitingReason: data.waitingReason,
+            nextAttemptAt: data.nextAttemptAt,
             errorMessage: data.errorMessage,
             totalPromptTokens: data.totalPromptTokens,
             totalCompletionTokens: data.totalCompletionTokens,
@@ -101,9 +104,15 @@ export function LiveDebate({
 
   return (
     <div className="space-y-6">
-      {state.status === "running" && state.waitingReason && <Notice tone="amber">{state.waitingReason}</Notice>}
-      {state.status === "failed" && (
-        <Notice tone="red">This debate stopped because of an error: {state.errorMessage ?? "unknown error"}.</Notice>
+      {state.status === "running" && state.waitingReason && (
+        <Notice tone="amber">
+          {state.waitingReason}
+          {state.nextAttemptAt && (
+            <span className="block text-xs">
+              <Countdown to={state.nextAttemptAt} label="Next try in" />
+            </span>
+          )}
+        </Notice>
       )}
 
       {turns.length === 0 && state.status === "running" && (

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { SignInForm } from "@/components/auth/auth-forms";
+import { GitHubButton, SignInForm } from "@/components/auth/auth-forms";
+import { githubEnabled } from "@/lib/auth/auth";
 import { Card } from "@/components/ui";
 import { safeNext } from "@/lib/auth/session";
 
@@ -18,5 +19,13 @@ export default function SignInPage(props: PageProps<"/sign-in">) {
 
 async function Form({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { next } = await searchParams;
-  return <SignInForm next={safeNext(next)} />;
+  const target = safeNext(next);
+  return (
+    <>
+      {githubEnabled() && <GitHubButton next={target} />}
+      <div className={githubEnabled() ? "mt-4" : undefined}>
+        <SignInForm next={target} />
+      </div>
+    </>
+  );
 }

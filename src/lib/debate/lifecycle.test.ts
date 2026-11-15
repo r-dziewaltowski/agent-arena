@@ -14,10 +14,12 @@ import {
   enter,
   LifecycleError,
   NOT_ENOUGH_AT_START_REASON,
+  resumeDebate,
   startDebate,
   startDueScheduled,
   withdraw,
 } from "./lifecycle";
+import { explainFailure } from "./explain-error";
 
 const NOW = 1_700_000_000_000;
 
@@ -249,6 +251,28 @@ describe("deleting", () => {
     const agentId = await seedAgent(db, "bob");
     await deleteAgent(db, { agentId, userId: "admin", isAdmin: true });
     expect(await db.select().from(agents).where(eq(agents.id, agentId))).toHaveLength(0);
+  });
+});
+
+describe("resuming a failed debate", () => {
+  it("lets the creator or an admin resume it, clearing the error", async () => {
+    const { debateId } = await runningDebate();
+    await db.update(debates).set({ status: "failed", errorMessage: "boom", retryCount: 3 }).where(eq(debates.id, debateId));
+
+    await expectCode(resumeDebate(db, { debateId, userId: "bob", isAdmin: false }), "FORBIDDEN");
+    await resumeDebate(db, { debateId, userId: "alice", isAdmin: false });
+    expect(await getDebate(debateId)).toMatchObject({ status: "running", errorMessage: null, retryCount: 0 });
+
+    await expectCode(resumeDebate(db, { debateId, userId: "admin", isAdmin: true }), "NOT_FAILED");
+  });
+});
+
+describe("explainFailure", () => {
+  it("turns common errors into plain language", () => {
+    expect(explainFailure("GROQ_API_KEY is not set, so Groq models can't be used.").summary).toMatch(/API key is missing/);
+    expect(explainFailure("The model `x` does not exist or you do not have access to it.").summary).toMatch(/isn't available/);
+    expect(explainFailure("The model returned an empty turn.").summary).toMatch(/empty replies/);
+    expect(explainFailure(null).canResume).toBe(true);
   });
 });
 

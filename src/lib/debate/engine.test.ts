@@ -1,3 +1,5 @@
+import { simulateReadableStream } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { catalogAvailability } from "../ai/models";
@@ -231,6 +233,65 @@ describe("runStep", () => {
     });
     const seen = (await Promise.all(reads)).map((rows) => rows[0]);
     expect(seen.some((r) => r?.status === "streaming" && r.content.length > 0)).toBe(true);
+  });
+});
+
+describe("rolling summary", () => {
+  it("folds older turns into a summary once 12 have built up, keeping the last 6 word for word", async () => {
+    await seedUser(db, "carol");
+    const debateId = await createDebate(
+      db,
+      "alice",
+      { topic: "Should cities ban cars?", rounds: 5, maxParticipants: 3, startMode: "manual" },
+      clock.now(),
+    );
+    for (const [i, user] of ["alice", "bob", "carol"].entries()) {
+      await enter(db, { debateId, userId: user, agentId: await seedAgent(db, user, { name: `Speaker${i + 1}` }), position: i + 1 });
+    }
+    await startDebate(db, { debateId, userId: "alice" }, clock.now());
+
+    // Every call gets a distinct reply, so we can tell turns from the summary.
+    let n = 0;
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        n += 1;
+        const text = `Reply number ${n}.`;
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: "text-start" as const, id: "t" },
+              { type: "text-delta" as const, id: "t", delta: text },
+              { type: "text-end" as const, id: "t" },
+              {
+                type: "finish" as const,
+                finishReason: { unified: "stop" as const, raw: undefined },
+                logprobs: undefined,
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: 5, reasoning: undefined },
+                },
+              },
+            ],
+          }),
+        };
+      },
+    });
+    const opts = { resolveModel: resolverFor(model), now: clock.now };
+
+    for (let i = 0; i < 11; i++) await runStep(db, debateId, opts);
+    expect((await getDebate(debateId)).summary).toBeNull();
+
+    await runStep(db, debateId, opts); // turn 12, then the fold (call 13)
+    const d = await getDebate(debateId);
+    expect(d.summaryThroughSeq).toBe(6);
+    expect(d.summary).toBe("Reply number 13.");
+
+    await runStep(db, debateId, opts); // turn 13 sees the summary + turns 7-12
+    const prompt = JSON.stringify(model.doStreamCalls.at(-1)!.prompt);
+    expect(prompt).toContain("so far, summarised");
+    expect(prompt).toContain("Reply number 13.");
+    expect(prompt).not.toContain("Reply number 1.");
+    expect(prompt).toContain("Reply number 7.");
   });
 });
 

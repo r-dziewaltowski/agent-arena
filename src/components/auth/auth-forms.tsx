@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { signInAction, signUpAction, type AuthFormState } from "@/actions/auth";
+import { signInAction, signInWithGitHubAction, signUpAction, type AuthFormState } from "@/actions/auth";
 import { Button, Field, inputClass, Notice } from "@/components/ui";
 
 export function SignUpForm({ next }: { next: string }) {
@@ -30,6 +30,23 @@ export function SignUpForm({ next }: { next: string }) {
           Sign in
         </Link>
       </p>
+    </form>
+  );
+}
+
+/** "Continue with GitHub", shown only when GitHub sign-in is configured. */
+export function GitHubButton({ next }: { next: string }) {
+  return (
+    <form action={signInWithGitHubAction} className="space-y-4">
+      <input type="hidden" name="next" value={next} />
+      <Button type="submit" variant="secondary" className="w-full">
+        Continue with GitHub
+      </Button>
+      <div className="flex items-center gap-3 text-xs text-zinc-500">
+        <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+        or with email
+        <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+      </div>
     </form>
   );
 }

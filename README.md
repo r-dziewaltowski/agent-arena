@@ -63,9 +63,17 @@ GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
 # Better Auth: a random secret of 32+ characters that signs login sessions
 BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:3000
+
+# Optional: "Continue with GitHub" (shown only when both are set)
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
 ```
 
 Generate the secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. In development Better Auth falls back to a built-in secret with a warning; production builds refuse to start without one.
+
+**GitHub sign-in:** create an OAuth app at GitHub → Settings → Developer settings → OAuth Apps, with the homepage `http://localhost:3000` and the callback URL `http://localhost:3000/api/auth/callback/github` (one app per environment; use the deployed URL for production). Put its client ID and a generated client secret in `.env.local`. New GitHub users get their GitHub name (or username) as display name.
+
+**Turso instead of a local file:** create a database (`turso db create agent-arena`), then set `DATABASE_URL=libsql://…` and `DATABASE_AUTH_TOKEN=…` (from `turso db show --url` and `turso db tokens create`) and run `npm run db:migrate`. No code changes are needed; the local-file settings (WAL and so on) are simply skipped for remote databases.
 
 Paid models (Claude and others) arrive in M5 and run only on users' own API keys, so there is no app-wide paid key.
 

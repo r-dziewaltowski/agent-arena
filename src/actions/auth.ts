@@ -50,6 +50,16 @@ export async function signInAction(_prev: AuthFormState, formData: FormData): Pr
   redirect(safeNext(formData.get("next")));
 }
 
+/** Starts GitHub sign-in: Better Auth returns GitHub's authorization page to send the browser to. */
+export async function signInWithGitHubAction(formData: FormData) {
+  const result = await auth.api.signInSocial({
+    body: { provider: "github", callbackURL: safeNext(formData.get("next")) },
+    headers: await headers(),
+  });
+  if (!result.url) throw new Error("GitHub sign-in is not available.");
+  redirect(result.url);
+}
+
 export async function signOutAction() {
   await auth.api.signOut({ headers: await headers() });
   redirect("/debates");

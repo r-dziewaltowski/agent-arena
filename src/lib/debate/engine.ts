@@ -12,6 +12,7 @@ import { debateParticipants, debates, turns } from "../db/schema";
 import { publishChunk } from "./broadcast";
 import { votingClosesAtFor } from "./lifecycle";
 import { buildPrompt, cleanTurnText, trimToLastSentence, turnKindFor, type Speaker } from "./prompt";
+import { maybeFoldSummary } from "./summarize";
 
 /** A lock older than this is considered abandoned (e.g. the worker crashed). */
 export const LOCK_TTL_MS = 90_000;
@@ -263,6 +264,15 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
         })
         .where(and(eq(debates.id, debateId), eq(debates.lockToken, lockToken)));
     });
+
+    // Long debates: fold older turns into the rolling summary (still holding the lock).
+    if (!completed) {
+      await maybeFoldSummary(db, debateId, {
+        resolveModel: resolve,
+        provider: speakerRow.provider as Provider,
+        modelId: speakerRow.modelId ?? "",
+      });
+    }
 
     return { kind: "turn", turnId: turnId!, seq, speaker: speaker.name, text: cleaned, debateCompleted: completed };
   } finally {

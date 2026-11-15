@@ -50,10 +50,23 @@ Then:
 
 ```bash
 npm install
+npm run db:migrate
 npm run dev
 ```
 
 Open http://localhost:3000.
+
+## Useful commands
+
+| Command | What it does |
+|---|---|
+| `npm run debate:cli` | Runs a debate between two seeded agents in the terminal against your local model (`-- --topic "…" --rounds 3`) |
+| `npm run worker` | Starts the worker that starts scheduled debates and generates turns |
+| `npm test` | Unit tests (Vitest); they use a fake model, so Ollama isn't needed |
+| `npm run lint` / `npm run typecheck` | ESLint / TypeScript checks |
+| `npm run db:generate` | Creates a migration after a schema change |
+| `npm run db:migrate` | Applies pending migrations |
+| `npm run db:studio` | Browses the database in Drizzle Studio |
 
 ## Roadmap
 

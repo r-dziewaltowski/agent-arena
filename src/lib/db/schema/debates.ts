@@ -1,0 +1,133 @@
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { agents } from "./agents";
+import { user } from "./auth";
+
+export const debates = sqliteTable(
+  "debates",
+  {
+    id: text("id").primaryKey(),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    // Configuration, fixed at creation.
+    topic: text("topic").notNull(),
+    rounds: integer("rounds").notNull().default(3),
+    maxParticipants: integer("max_participants").notNull(),
+    startMode: text("start_mode", { enum: ["manual", "when_full", "scheduled"] }).notNull(),
+    startAt: integer("start_at"),
+    allowMultipleEntries: integer("allow_multiple_entries", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    votingDuration: text("voting_duration", { enum: ["1h", "1d", "3d", "1w"] })
+      .notNull()
+      .default("3d"),
+    tallyVisibility: text("tally_visibility", { enum: ["live", "after_vote", "after_close"] })
+      .notNull()
+      .default("after_vote"),
+
+    // State.
+    status: text("status", {
+      enum: ["open", "running", "completed", "failed", "cancelled"],
+    })
+      .notNull()
+      .default("open"),
+    cancelReason: text("cancel_reason"),
+    currentRound: integer("current_round").notNull().default(1),
+    currentTurnIndex: integer("current_turn_index").notNull().default(0),
+    /** Safety cap on prompt + completion tokens, computed at start. Not shown to users. */
+    maxTotalTokens: integer("max_total_tokens"),
+    totalPromptTokens: integer("total_prompt_tokens").notNull().default(0),
+    totalCompletionTokens: integer("total_completion_tokens").notNull().default(0),
+    summary: text("summary"),
+    summaryThroughSeq: integer("summary_through_seq").notNull().default(0),
+
+    // Worker coordination and error handling.
+    lockToken: text("lock_token"),
+    lockedAt: integer("locked_at"),
+    /** Consecutive bad turns; the debate fails after 2 retries. */
+    retryCount: integer("retry_count").notNull().default(0),
+    /** Consecutive "model unreachable" attempts, used for the growing backoff. */
+    waitAttempts: integer("wait_attempts").notNull().default(0),
+    nextAttemptAt: integer("next_attempt_at"),
+    waitingReason: text("waiting_reason"),
+    errorMessage: text("error_message"),
+
+    createdAt: integer("created_at").notNull(),
+    startedAt: integer("started_at"),
+    completedAt: integer("completed_at"),
+    votingClosesAt: integer("voting_closes_at"),
+  },
+  (t) => [
+    index("debates_creator_idx").on(t.creatorId),
+    index("debates_status_created_idx").on(t.status, t.createdAt),
+    index("debates_status_start_idx").on(t.status, t.startAt),
+  ],
+);
+
+/** An entry while the debate is open; a participant once it has started. */
+export const debateParticipants = sqliteTable(
+  "debate_participants",
+  {
+    id: text("id").primaryKey(),
+    debateId: text("debate_id")
+      .notNull()
+      .references(() => debates.id, { onDelete: "cascade" }),
+    /** Null once the agent is deleted after the debate started; the snapshot remains. */
+    agentId: text("agent_id").references(() => agents.id, { onDelete: "set null" }),
+    /** The agent's owner. */
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Slot = speaking order, 1-based. Renumbered 1..n at start. */
+    position: integer("position").notNull(),
+    joinedAt: integer("joined_at").notNull(),
+
+    // Snapshot of the agent, filled at start.
+    name: text("name"),
+    persona: text("persona"),
+    style: text("style"),
+    tone: text("tone"),
+    stance: text("stance"),
+    provider: text("provider"),
+    modelId: text("model_id"),
+    creativity: text("creativity"),
+    turnLength: text("turn_length"),
+    temperature: real("temperature"),
+    maxOutputTokens: integer("max_output_tokens"),
+  },
+  (t) => [
+    index("participants_debate_idx").on(t.debateId),
+    index("participants_debate_user_idx").on(t.debateId, t.userId),
+    uniqueIndex("participants_debate_position_uq").on(t.debateId, t.position),
+    uniqueIndex("participants_debate_agent_uq").on(t.debateId, t.agentId),
+  ],
+);
+
+export const turns = sqliteTable(
+  "turns",
+  {
+    id: text("id").primaryKey(),
+    debateId: text("debate_id")
+      .notNull()
+      .references(() => debates.id, { onDelete: "cascade" }),
+    /** Null for summary turns. */
+    participantId: text("participant_id").references(() => debateParticipants.id, {
+      onDelete: "cascade",
+    }),
+    round: integer("round").notNull(),
+    seq: integer("seq").notNull(),
+    kind: text("kind", { enum: ["opening", "argument", "closing", "summary"] }).notNull(),
+    status: text("status", { enum: ["streaming", "complete"] }).notNull(),
+    /** Grows while the turn is streaming. */
+    content: text("content").notNull().default(""),
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    modelId: text("model_id"),
+    latencyMs: integer("latency_ms"),
+    finishReason: text("finish_reason"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("turns_debate_seq_uq").on(t.debateId, t.seq)],
+);

@@ -127,6 +127,7 @@ Each deploy runs `npm run vercel-build`: it applies pending migrations to that e
 | `npm run queue:dev` | Starts only the QStash dev server in Docker |
 | `npm run queue:setup` | Creates the sweep schedule on a deployment (`APP_URL=https://… npm run queue:setup`) |
 | `npm test` | Unit tests (Vitest); they use a fake model, so Ollama isn't needed |
+| `npm run test:e2e` | End-to-end tests (Playwright): a real browser against a production build on port 3100, with a scripted fake model, a throwaway database and the QStash dev server (started in Docker if `npm run dev` isn't running). Locally they use your installed Chrome |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript checks |
 | `npm run db:generate` | Creates a migration after a schema change |
 | `npm run db:migrate` | Applies pending migrations |

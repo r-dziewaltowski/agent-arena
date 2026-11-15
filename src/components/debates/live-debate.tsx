@@ -12,7 +12,6 @@ type LiveState = {
   status: string;
   waitingReason: string | null;
   nextAttemptAt: number | null;
-  errorMessage: string | null;
   totalPromptTokens: number;
   totalCompletionTokens: number;
 };
@@ -78,7 +77,6 @@ export function LiveDebate({
             status: data.status,
             waitingReason: data.waitingReason,
             nextAttemptAt: data.nextAttemptAt,
-            errorMessage: data.errorMessage,
             totalPromptTokens: data.totalPromptTokens,
             totalCompletionTokens: data.totalCompletionTokens,
           });

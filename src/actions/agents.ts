@@ -5,21 +5,28 @@ import { eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getModelOptions } from "@/lib/ai/model-options";
-import { requireUser } from "@/lib/auth/session";
+import { requireUser, safeNext } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { agents } from "@/lib/db/schema";
 import { deleteAgent, LifecycleError } from "@/lib/debate/lifecycle";
 import { agentSchema } from "@/lib/validation/agent";
+import { pickValues, type FormValues } from "@/lib/form-values";
+import { z } from "zod";
 
 export type AgentFormState = {
   errors?: Partial<Record<string, string[]>>;
   message?: string;
+  /** What was submitted, handed back on errors so the form keeps it. */
+  values?: FormValues;
 };
+
+const AGENT_FIELDS = ["name", "persona", "style", "tone", "stance", "model", "creativity", "turnLength", "visibility"] as const;
 
 /** Creates or updates an agent from the agent form. */
 export async function saveAgent(_prev: AgentFormState, formData: FormData): Promise<AgentFormState> {
   const me = await requireUser();
   const db = await getDb();
+  const values = pickValues(formData, AGENT_FIELDS);
   const agentId = formData.get("id") ? String(formData.get("id")) : null;
   const [provider, ...modelParts] = String(formData.get("model") ?? "").split("::");
 
@@ -36,7 +43,7 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
     visibility: formData.get("visibility"),
   });
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors, message: "Please fix the highlighted fields." };
+    return { errors: z.flattenError(parsed.error).fieldErrors, message: "Please fix the highlighted fields.", values };
   }
   const v = parsed.data;
 
@@ -46,10 +53,10 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
   let existing: typeof agents.$inferSelect | undefined;
   if (agentId) {
     [existing] = await db.select().from(agents).where(eq(agents.id, agentId));
-    if (!existing || existing.ownerId !== me.id) return { message: "You can only edit your own agents." };
+    if (!existing || existing.ownerId !== me.id) return { message: "You can only edit your own agents.", values };
   }
   const unchanged = existing && existing.provider === v.provider && existing.modelId === v.modelId;
-  if (!offered && !unchanged) return { errors: { model: ["Pick one of the available models."] } };
+  if (!offered && !unchanged) return { errors: { model: ["Pick one of the available models."] }, values };
 
   const now = Date.now();
   if (existing) {
@@ -72,6 +79,7 @@ export async function removeAgent(formData: FormData) {
   } catch (err) {
     if (!(err instanceof LifecycleError)) throw err;
   }
-  if (formData.get("redirectTo")) redirect(String(formData.get("redirectTo")));
+  // Same-site paths only, like sign-in's return address: the value comes from the submitted form.
+  if (formData.get("redirectTo")) redirect(safeNext(formData.get("redirectTo")));
   refresh();
 }

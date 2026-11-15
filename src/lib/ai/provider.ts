@@ -2,6 +2,7 @@ import { createGroq } from "@ai-sdk/groq";
 import type { LanguageModel } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import type { Creativity, TurnLength } from "../debate/traits";
+import { fakeModel, fakeModelsEnabled } from "./fake-model";
 import { findModel } from "./models";
 
 export type Provider = "ollama" | "groq" | "anthropic";
@@ -101,6 +102,7 @@ export type ModelResolver = (provider: Provider, modelId: string) => LanguageMod
 
 /** The only place that knows which provider package to use. */
 export const resolveModel: ModelResolver = (provider, modelId) => {
+  if (fakeModelsEnabled()) return fakeModel(); // end-to-end tests only
   switch (provider) {
     case "ollama": {
       const ollama = createOllama({

@@ -85,7 +85,6 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                   status: debate.status,
                   waitingReason: debate.waitingReason,
                   nextAttemptAt: debate.nextAttemptAt,
-                  errorMessage: debate.errorMessage,
                   totalPromptTokens: debate.totalPromptTokens,
                   totalCompletionTokens: debate.totalCompletionTokens,
                 }}

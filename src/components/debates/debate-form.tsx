@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useSyncExternalStore } from "react";
 import { createDebateAction, type FormState } from "@/actions/debates";
 import { Button, Field, inputClass, Notice } from "@/components/ui";
+import type { FormValues } from "@/lib/form-values";
 
 const VOTING = [
   ["1h", "1 hour"],
@@ -17,6 +18,12 @@ const TALLY = [
   ["after_close", "When voting closes", "Nobody sees the counts until voting closes"],
 ] as const;
 
+const START_MODES = [
+  ["manual", "When I start it", "You press Start once at least 2 agents have entered."],
+  ["when_full", "When all slots are filled", "Starts automatically on the last entry."],
+  ["scheduled", "At a set time", "Starts with whoever has entered (2 or more); otherwise it's cancelled."],
+] as const;
+
 /** A datetime-local value a little in the future, in the viewer's own time zone. */
 function inAnHour(): string {
   const d = new Date(Date.now() + 60 * 60 * 1000);
@@ -25,20 +32,43 @@ function inAnHour(): string {
   return local.toISOString().slice(0, 16);
 }
 
+/** The viewer's time zone, so the server can turn the typed local time into a moment ("" while server-rendering). */
+const noSubscribe = () => () => {};
+function useTimeZone(): string {
+  return useSyncExternalStore(
+    noSubscribe,
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    () => "",
+  );
+}
+
 export function DebateForm() {
   const [state, formAction, pending] = useActionState<FormState, FormData>(createDebateAction, {});
-  const [startMode, setStartMode] = useState("manual");
-  const [localStart, setLocalStart] = useState("");
-  // The server needs a moment in time, so convert the viewer's local date and time to epoch ms.
-  const startAt = localStart ? new Date(localStart).getTime() : "";
-
   return (
     <form action={formAction} className="space-y-6">
       {state.message && <Notice tone="red">{state.message}</Notice>}
+      {/* Remounted with what was submitted after a rejected form, so nothing typed is lost. */}
+      <DebateFields key={JSON.stringify(state.values ?? {})} values={state.values ?? {}} />
+      <Button type="submit" disabled={pending}>
+        {pending ? "Creating…" : "Create debate"}
+      </Button>
+    </form>
+  );
+}
 
-      <Field label="Topic" hint="What the agents will debate. A question works well.">
+function DebateFields({ values }: { values: FormValues }) {
+  const timeZone = useTimeZone();
+  const [startMode, setStartMode] = useState(values.startMode ?? "manual");
+  const [defaultStart, setDefaultStart] = useState(values.startAtLocal ?? "");
+
+  return (
+    <>
+      <input type="hidden" name="timeZone" defaultValue={timeZone} />
+
+      <Field label="Topic" hint="What the agents will debate. A question works well. 5 to 200 characters.">
         <input
           name="topic"
+          defaultValue={values.topic}
           required
           minLength={5}
           maxLength={200}
@@ -49,7 +79,7 @@ export function DebateForm() {
 
       <div className="grid gap-6 sm:grid-cols-2">
         <Field label="Rounds" hint="Round 1 is openings, the last round is closing statements.">
-          <select name="rounds" defaultValue="3" className={inputClass}>
+          <select name="rounds" defaultValue={values.rounds ?? "3"} className={inputClass}>
             {[2, 3, 4, 5, 6].map((n) => (
               <option key={n} value={n}>
                 {n} rounds
@@ -58,7 +88,7 @@ export function DebateForm() {
           </select>
         </Field>
         <Field label="Participants" hint="How many agents can take part.">
-          <select name="maxParticipants" defaultValue="2" className={inputClass}>
+          <select name="maxParticipants" defaultValue={values.maxParticipants ?? "2"} className={inputClass}>
             {[2, 3, 4].map((n) => (
               <option key={n} value={n}>
                 {n} agents
@@ -71,20 +101,16 @@ export function DebateForm() {
       <fieldset>
         <legend className="text-sm font-medium">Start</legend>
         <div className="mt-1 space-y-2 text-sm">
-          {[
-            ["manual", "When I start it", "You press Start once at least 2 agents have entered."],
-            ["when_full", "When all slots are filled", "Starts automatically on the last entry."],
-            ["scheduled", "At a set time", "Starts with whoever has entered (2 or more); otherwise it's cancelled."],
-          ].map(([value, label, hint]) => (
+          {START_MODES.map(([value, label, hint]) => (
             <label key={value} className="flex items-start gap-2">
               <input
                 type="radio"
                 name="startMode"
                 value={value}
-                checked={startMode === value}
+                defaultChecked={startMode === value}
                 onChange={() => {
                   setStartMode(value);
-                  if (value === "scheduled" && !localStart) setLocalStart(inAnHour());
+                  if (value === "scheduled" && !defaultStart) setDefaultStart(inAnHour());
                 }}
                 className="mt-1"
               />
@@ -99,19 +125,24 @@ export function DebateForm() {
           <div className="mt-3 max-w-xs">
             <input
               type="datetime-local"
-              value={localStart}
-              onChange={(e) => setLocalStart(e.target.value)}
+              name="startAtLocal"
+              defaultValue={defaultStart}
               required
+              aria-label="Start time"
               className={inputClass}
             />
-            <input type="hidden" name="startAt" value={startAt} />
             <p className="mt-1 text-xs text-zinc-500">In your local time.</p>
           </div>
         )}
       </fieldset>
 
       <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" name="allowMultipleEntries" className="mt-1" />
+        <input
+          type="checkbox"
+          name="allowMultipleEntries"
+          defaultChecked={values.allowMultipleEntries === "on"}
+          className="mt-1"
+        />
         <span>
           <span className="font-medium">Allow several agents per user</span>
           <span className="block text-xs text-zinc-500">Off: each user enters one agent. On: one user can fill every slot.</span>
@@ -120,7 +151,7 @@ export function DebateForm() {
 
       <div className="grid gap-6 sm:grid-cols-2">
         <Field label="Voting stays open for" hint="Counted from when the debate finishes.">
-          <select name="votingDuration" defaultValue="3d" className={inputClass}>
+          <select name="votingDuration" defaultValue={values.votingDuration ?? "3d"} className={inputClass}>
             {VOTING.map(([v, label]) => (
               <option key={v} value={v}>
                 {label}
@@ -129,7 +160,7 @@ export function DebateForm() {
           </select>
         </Field>
         <Field label="Show vote counts" hint={TALLY[0][2]}>
-          <select name="tallyVisibility" defaultValue="after_vote" className={inputClass}>
+          <select name="tallyVisibility" defaultValue={values.tallyVisibility ?? "after_vote"} className={inputClass}>
             {TALLY.map(([v, label, hint]) => (
               <option key={v} value={v} title={hint}>
                 {label}
@@ -140,9 +171,6 @@ export function DebateForm() {
       </div>
 
       <p className="text-xs text-zinc-500">Settings can&apos;t be changed after the debate is created.</p>
-      <Button type="submit" disabled={pending}>
-        {pending ? "Creating…" : "Create debate"}
-      </Button>
-    </form>
+    </>
   );
 }

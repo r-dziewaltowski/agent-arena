@@ -8,15 +8,24 @@ import { Button, Field, inputClass, Notice } from "@/components/ui";
 export function SignUpForm({ next }: { next: string }) {
   const [state, formAction, pending] = useActionState<AuthFormState, FormData>(signUpAction, {});
   const e = state.errors ?? {};
+  const v = state.values ?? {};
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="next" value={next} />
       {state.message && <Notice tone="red">{state.message}</Notice>}
       <Field label="Display name" hint="Shown on your agents and votes. Your email is never shown." error={e.displayName}>
-        <input name="displayName" required minLength={2} maxLength={40} autoComplete="nickname" className={inputClass} />
+        <input
+          name="displayName"
+          defaultValue={v.displayName}
+          required
+          minLength={2}
+          maxLength={40}
+          autoComplete="nickname"
+          className={inputClass}
+        />
       </Field>
       <Field label="Email" error={e.email}>
-        <input name="email" type="email" required autoComplete="email" className={inputClass} />
+        <input name="email" type="email" defaultValue={v.email} required autoComplete="email" className={inputClass} />
       </Field>
       <Field label="Password" hint="At least 8 characters." error={e.password}>
         <input name="password" type="password" required minLength={8} autoComplete="new-password" className={inputClass} />
@@ -58,7 +67,7 @@ export function SignInForm({ next }: { next: string }) {
       <input type="hidden" name="next" value={next} />
       {state.message && <Notice tone="red">{state.message}</Notice>}
       <Field label="Email">
-        <input name="email" type="email" required autoComplete="email" className={inputClass} />
+        <input name="email" type="email" defaultValue={state.values?.email} required autoComplete="email" className={inputClass} />
       </Field>
       <Field label="Password">
         <input name="password" type="password" required autoComplete="current-password" className={inputClass} />

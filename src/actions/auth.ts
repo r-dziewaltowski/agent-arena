@@ -6,8 +6,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/lib/auth/auth";
 import { safeNext } from "@/lib/auth/session";
+import { pickValues, type FormValues } from "@/lib/form-values";
 
-export type AuthFormState = { message?: string; errors?: Partial<Record<string, string[]>> };
+export type AuthFormState = { message?: string; errors?: Partial<Record<string, string[]>>; values?: FormValues };
+
+// Handed back on errors so the form keeps what was typed (passwords never are).
+const SIGN_UP_FIELDS = ["displayName", "email"] as const;
+const SIGN_IN_FIELDS = ["email"] as const;
 
 const signUpSchema = z.object({
   displayName: z.string().trim().min(2, "At least 2 characters.").max(40),
@@ -21,7 +26,8 @@ export async function signUpAction(_prev: AuthFormState, formData: FormData): Pr
     email: formData.get("email"),
     password: formData.get("password"),
   });
-  if (!parsed.success) return { errors: z.flattenError(parsed.error).fieldErrors };
+  const values = pickValues(formData, SIGN_UP_FIELDS);
+  if (!parsed.success) return { errors: z.flattenError(parsed.error).fieldErrors, values };
   const { displayName, email, password } = parsed.data;
   try {
     // `name` is Better Auth's required field; we show `displayName` everywhere.
@@ -29,9 +35,9 @@ export async function signUpAction(_prev: AuthFormState, formData: FormData): Pr
   } catch (err) {
     if (err instanceof APIError) {
       if (err.body?.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") {
-        return { errors: { email: ["An account with this email already exists."] } };
+        return { errors: { email: ["An account with this email already exists."] }, values };
       }
-      return { message: err.body?.message ?? "Couldn't create the account." };
+      return { message: err.body?.message ?? "Couldn't create the account.", values };
     }
     throw err;
   }
@@ -44,7 +50,7 @@ export async function signInAction(_prev: AuthFormState, formData: FormData): Pr
   try {
     await auth.api.signInEmail({ body: { email, password }, headers: await headers() });
   } catch (err) {
-    if (err instanceof APIError) return { message: "Invalid email or password." };
+    if (err instanceof APIError) return { message: "Invalid email or password.", values: pickValues(formData, SIGN_IN_FIELDS) };
     throw err;
   }
   redirect(safeNext(formData.get("next")));

@@ -29,7 +29,6 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/
       rounds: debate.rounds,
       waitingReason: debate.waitingReason,
       nextAttemptAt: debate.nextAttemptAt,
-      errorMessage: debate.errorMessage,
       totalPromptTokens: debate.totalPromptTokens,
       totalCompletionTokens: debate.totalCompletionTokens,
       turns: rows.filter((t) => t.kind !== "summary").map(toTurnView),

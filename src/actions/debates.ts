@@ -9,8 +9,10 @@ import type { Db } from "@/lib/db/client";
 import { createDebate, deleteDebate, enter, LifecycleError, resumeDebate, startDebate, withdraw } from "@/lib/debate/lifecycle";
 import { queueDebate } from "@/lib/jobs/advance";
 import { getQueue } from "@/lib/jobs/queue";
+import { pickValues, type FormValues } from "@/lib/form-values";
+import { localToEpoch } from "@/lib/time";
 
-export type FormState = { message?: string; errors?: Partial<Record<string, string[]>> };
+export type FormState = { message?: string; errors?: Partial<Record<string, string[]>>; values?: FormValues };
 
 /** Which models still exist, so a retired one falls back to its provider's default at start. */
 async function availability() {
@@ -29,11 +31,26 @@ async function queueSafely(db: Db, debateId: string, opts: { runningOnly?: boole
   }
 }
 
+const DEBATE_FIELDS = [
+  "topic",
+  "rounds",
+  "maxParticipants",
+  "startMode",
+  "startAtLocal",
+  "allowMultipleEntries",
+  "votingDuration",
+  "tallyVisibility",
+] as const;
+
 export async function createDebateAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const me = await requireUser();
   const db = await getDb();
   const startMode = String(formData.get("startMode"));
-  const startAtRaw = formData.get("startAt");
+  // The form sends the local date and time as typed plus the browser's time zone.
+  const startAt =
+    startMode === "scheduled"
+      ? (localToEpoch(String(formData.get("startAtLocal") ?? ""), String(formData.get("timeZone") || "UTC")) ?? undefined)
+      : undefined;
   let id: string;
   try {
     id = await createDebate(db, me.id, {
@@ -41,13 +58,13 @@ export async function createDebateAction(_prev: FormState, formData: FormData): 
       rounds: Number(formData.get("rounds")),
       maxParticipants: Number(formData.get("maxParticipants")),
       startMode: startMode as "manual" | "when_full" | "scheduled",
-      startAt: startMode === "scheduled" && startAtRaw ? Number(startAtRaw) : undefined,
+      startAt,
       allowMultipleEntries: formData.get("allowMultipleEntries") === "on",
       votingDuration: String(formData.get("votingDuration")) as "1h" | "1d" | "3d" | "1w",
       tallyVisibility: String(formData.get("tallyVisibility")) as "live" | "after_vote" | "after_close",
     });
   } catch (err) {
-    if (err instanceof LifecycleError) return { message: err.message };
+    if (err instanceof LifecycleError) return { message: err.message, values: pickValues(formData, DEBATE_FIELDS) };
     throw err;
   }
   await queueSafely(db, id); // a scheduled debate gets a message at its start time
@@ -110,7 +127,7 @@ export async function resumeDebateAction(formData: FormData) {
   const db = await getDb();
   const debateId = String(formData.get("debateId"));
   try {
-    await resumeDebate(db, { debateId, userId: me.id, isAdmin: me.isAdmin });
+    await resumeDebate(db, { debateId, userId: me.id, isAdmin: me.isAdmin }, await availability());
     await queueSafely(db, debateId);
   } catch (err) {
     if (!(err instanceof LifecycleError)) throw err;

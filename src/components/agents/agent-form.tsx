@@ -44,22 +44,26 @@ export function AgentForm({
   const e = state.errors ?? {};
   const currentValue = `${initial.provider}::${initial.modelId}`;
   const currentOffered = modelGroups.some((g) => g.models.some((m) => `${m.provider}::${m.id}` === currentValue));
+  // After a rejected save, show what was submitted rather than the original values.
+  const sent = state.values ?? {};
+  const val = (key: keyof AgentFormValues | "model", fallback: string) => sent[key] ?? fallback;
 
   return (
-    <form action={formAction} className="space-y-6">
+    // Remounted after a rejected save so every field (dropdowns included) starts from what was sent.
+    <form key={JSON.stringify(state.values ?? {})} action={formAction} className="space-y-6">
       {initial.id && <input type="hidden" name="id" value={initial.id} />}
       {state.message && <Notice tone="red">{state.message}</Notice>}
 
       <div className="grid gap-6 sm:grid-cols-2">
         <Field label="Name" error={e.name} hint="How the agent is shown in debates.">
-          <input name="name" defaultValue={initial.name} maxLength={40} required className={inputClass} />
+          <input name="name" defaultValue={val("name", initial.name)} maxLength={40} required className={inputClass} />
         </Field>
         <Field
           label="Model"
           error={e.model ?? e.provider ?? e.modelId}
           hint={modelGroups.length === 0 ? "No models available: set GROQ_API_KEY or start Ollama." : undefined}
         >
-          <select name="model" defaultValue={currentValue} required className={inputClass}>
+          <select name="model" defaultValue={val("model", currentValue)} required className={inputClass}>
             {!currentOffered && initial.modelId && (
               <option value={currentValue}>{currentModelLabel ?? initial.modelId} (no longer offered)</option>
             )}
@@ -79,14 +83,22 @@ export function AgentForm({
       <Field
         label="Persona"
         error={e.persona}
-        hint="Who the agent is: background, beliefs, expertise, quirks. This carries most of its identity."
+        hint="Who the agent is: background, beliefs, expertise, quirks. This carries most of its identity. 10 to 1,500 characters."
       >
-        <textarea name="persona" defaultValue={initial.persona} rows={5} maxLength={1500} required className={inputClass} />
+        <textarea
+          name="persona"
+          defaultValue={val("persona", initial.persona)}
+          rows={5}
+          minLength={10}
+          maxLength={1500}
+          required
+          className={inputClass}
+        />
       </Field>
 
       <div className="grid gap-6 sm:grid-cols-3">
         <Field label="Style" error={e.style} hint="How it argues. Pick a suggestion or write your own.">
-          <input name="style" list="style-presets" defaultValue={initial.style} maxLength={80} required className={inputClass} />
+          <input name="style" list="style-presets" defaultValue={val("style", initial.style)} maxLength={80} required className={inputClass} />
           <datalist id="style-presets">
             {Object.keys(STYLE_PRESETS).map((k) => (
               <option key={k} value={k}>
@@ -96,7 +108,7 @@ export function AgentForm({
           </datalist>
         </Field>
         <Field label="Tone" error={e.tone} hint="How it sounds. Pick a suggestion or write your own.">
-          <input name="tone" list="tone-presets" defaultValue={initial.tone} maxLength={80} required className={inputClass} />
+          <input name="tone" list="tone-presets" defaultValue={val("tone", initial.tone)} maxLength={80} required className={inputClass} />
           <datalist id="tone-presets">
             {Object.keys(TONE_PRESETS).map((k) => (
               <option key={k} value={k}>
@@ -106,7 +118,7 @@ export function AgentForm({
           </datalist>
         </Field>
         <Field label="Stance" error={e.stance} hint="How it treats the other speakers.">
-          <select name="stance" defaultValue={initial.stance} className={inputClass}>
+          <select name="stance" defaultValue={val("stance", initial.stance)} className={inputClass}>
             {STANCES.map((s) => (
               <option key={s} value={s} title={STANCE_PRESETS[s].description}>
                 {traitLabel(s)}
@@ -120,13 +132,13 @@ export function AgentForm({
         name="creativity"
         label="Creativity"
         options={CREATIVITY_LEVELS.map((v) => ({ value: v, ...CREATIVITY_LABELS[v] }))}
-        defaultValue={initial.creativity}
+        defaultValue={val("creativity", initial.creativity)}
       />
       <Segmented
         name="turnLength"
         label="Turn length"
         options={TURN_LENGTHS.map((v) => ({ value: v, ...TURN_LENGTH_LABELS[v] }))}
-        defaultValue={initial.turnLength}
+        defaultValue={val("turnLength", initial.turnLength)}
       />
       <Segmented
         name="visibility"
@@ -135,7 +147,7 @@ export function AgentForm({
           { value: "private", label: "Private", hint: "Others see only its name and arguments in debates" },
           { value: "public", label: "Public", hint: "Others can view its full persona and settings" },
         ]}
-        defaultValue={initial.visibility}
+        defaultValue={val("visibility", initial.visibility)}
       />
       <p className="-mt-3 text-xs text-zinc-500">Either way, only you can enter this agent into debates.</p>
 

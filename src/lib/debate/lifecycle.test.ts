@@ -265,6 +265,23 @@ describe("resuming a failed debate", () => {
 
     await expectCode(resumeDebate(db, { debateId, userId: "admin", isAdmin: true }), "NOT_FAILED");
   });
+
+  it("switches participants on a retired model to the provider default, so resuming can work", async () => {
+    const debateId = await createDebate(db, "alice", manual(), NOW);
+    await enter(db, { debateId, userId: "alice", agentId: await seedAgent(db, "alice", { provider: "groq", modelId: "openai/gpt-oss-20b" }), position: 1 });
+    await enter(db, { debateId, userId: "bob", agentId: await seedAgent(db, "bob", { provider: "groq", modelId: "openai/gpt-oss-20b" }), position: 2 });
+    await startDebate(db, { debateId, userId: "alice" }, NOW);
+    // Since the start, Bob's snapshot model was retired (simulated by an unknown, retired catalog id).
+    const [, bob] = await entriesOf(debateId);
+    await db.update(debateParticipants).set({ modelId: "llama-3.3-70b-versatile" }).where(eq(debateParticipants.id, bob.id));
+    await db.update(debates).set({ status: "failed", errorMessage: "The model does not exist" }).where(eq(debates.id, debateId));
+
+    await resumeDebate(db, { debateId, userId: "alice", isAdmin: false });
+    expect((await entriesOf(debateId)).map((e) => [e.modelId, e.modelFallbackFrom])).toEqual([
+      ["openai/gpt-oss-20b", null],
+      ["openai/gpt-oss-120b", "llama-3.3-70b-versatile"],
+    ]);
+  });
 });
 
 describe("explainFailure", () => {

@@ -340,22 +340,38 @@ export async function startOrCancelScheduled(
 
 /**
  * Puts a failed debate back to running (creator or admin), e.g. after a missing API key was
- * added. It continues from the turn that failed; turns already written are kept.
+ * added. It continues from the turn that failed; turns already written are kept. A participant
+ * whose model has been retired since (a common reason to fail) switches to its provider's default
+ * model, recorded in `modelFallbackFrom` as at the start, so resuming doesn't just fail again.
  */
 export async function resumeDebate(
   db: Db,
   args: { debateId: string; userId: string; isAdmin: boolean },
+  availability: ModelAvailability = catalogAvailability(),
 ): Promise<void> {
   const debate = await loadDebate(db, args.debateId);
   if (!args.isAdmin && debate.creatorId !== args.userId) {
     throw new LifecycleError("FORBIDDEN", "Only the creator can resume this debate.");
   }
-  const rows = await db
-    .update(debates)
-    .set({ status: "running", errorMessage: null, retryCount: 0, waitAttempts: 0, nextAttemptAt: null, waitingReason: null })
-    .where(and(eq(debates.id, args.debateId), eq(debates.status, "failed")))
-    .returning({ id: debates.id });
-  if (rows.length === 0) throw new LifecycleError("NOT_FAILED", "Only a failed debate can be resumed.");
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(debates)
+      .set({ status: "running", errorMessage: null, retryCount: 0, waitAttempts: 0, nextAttemptAt: null, waitingReason: null })
+      .where(and(eq(debates.id, args.debateId), eq(debates.status, "failed")))
+      .returning({ id: debates.id });
+    if (rows.length === 0) throw new LifecycleError("NOT_FAILED", "Only a failed debate can be resumed.");
+
+    const participants = await tx.select().from(debateParticipants).where(eq(debateParticipants.debateId, args.debateId));
+    for (const p of participants) {
+      const provider = p.provider as Provider | null;
+      if (!provider || !p.modelId || availability.isAvailable(provider, p.modelId)) continue;
+      await tx
+        .update(debateParticipants)
+        // Keep the agent's original choice if it already fell back once.
+        .set({ modelId: defaultModelFor(provider), modelFallbackFrom: p.modelFallbackFrom ?? p.modelId })
+        .where(eq(debateParticipants.id, p.id));
+    }
+  });
 }
 
 /** Creators may delete their debate while it is open; admins may delete any debate at any time. */

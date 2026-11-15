@@ -2,6 +2,7 @@
  * The debate worker: starts scheduled debates when due and generates turns for running debates,
  * whether or not anyone is watching. Run with `npm run worker`; stop with Ctrl+C.
  */
+import "./load-env";
 import { openDb } from "../src/lib/db/client";
 import { runMigrations } from "../src/lib/db/migrate";
 import { runLoop } from "../src/lib/debate/runner";

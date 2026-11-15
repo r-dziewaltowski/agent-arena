@@ -1,3 +1,4 @@
+import "./load-env";
 import { openDb } from "../src/lib/db/client";
 import { runMigrations } from "../src/lib/db/migrate";
 

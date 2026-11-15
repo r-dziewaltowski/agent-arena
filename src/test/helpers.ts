@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { simulateReadableStream } from "ai";
+import { APICallError, simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { openDb, type Db } from "../lib/db/client";
 import { runMigrations } from "../lib/db/migrate";
@@ -96,6 +96,22 @@ export function unreachableModel(): MockLanguageModelV4 {
     doStream: async () => {
       throw Object.assign(new TypeError("fetch failed"), {
         cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:11434"), { code: "ECONNREFUSED" }),
+      });
+    },
+  });
+}
+
+/** A fake model whose calls fail with HTTP 429, as when a free tier's limit is reached. */
+export function rateLimitedModel(retryAfterSeconds?: number): MockLanguageModelV4 {
+  return new MockLanguageModelV4({
+    doStream: async () => {
+      throw new APICallError({
+        message: "Rate limit reached for model",
+        url: "https://api.groq.com/openai/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: retryAfterSeconds === undefined ? {} : { "retry-after": String(retryAfterSeconds) },
+        isRetryable: true,
       });
     },
   });

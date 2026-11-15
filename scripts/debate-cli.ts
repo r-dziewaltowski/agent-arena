@@ -4,9 +4,12 @@
  * turn as it streams.
  *
  *   npm run debate:cli -- --topic "Should city centres ban private cars?" --rounds 2
+ *   npm run debate:cli -- --provider groq            (needs GROQ_API_KEY in .env.local)
+ *   npm run debate:cli -- --provider groq --model llama-3.1-8b-instant
  */
+import "./load-env";
 import { eq } from "drizzle-orm";
-import { DEFAULT_OLLAMA_MODEL } from "../src/lib/ai/provider";
+import { defaultModelFor, type Provider } from "../src/lib/ai/provider";
 import { openDb, type Db } from "../src/lib/db/client";
 import { runMigrations } from "../src/lib/db/migrate";
 import { agents, debates, turns, user } from "../src/lib/db/schema";
@@ -21,7 +24,12 @@ function arg(name: string, fallback: string): string {
 
 const topic = arg("topic", "Should city centres ban private cars?");
 const rounds = Number(arg("rounds", "2"));
-const model = arg("model", process.env.OLLAMA_DEFAULT_MODEL ?? DEFAULT_OLLAMA_MODEL);
+const provider = arg("provider", "ollama") as Provider;
+if (!["ollama", "groq"].includes(provider)) {
+  console.error(`Unknown --provider "${provider}". Use ollama or groq.`);
+  process.exit(1);
+}
+const model = arg("model", defaultModelFor(provider));
 
 const DEV_USERS = [
   { id: "dev-user-alice", name: "Alice", email: "alice@example.test" },
@@ -62,7 +70,7 @@ async function seed(db: Db) {
   for (const a of DEV_AGENTS) {
     const values = {
       ...a,
-      provider: "ollama" as const,
+      provider,
       modelId: model,
       creativity: "balanced" as const,
       turnLength: "medium" as const,
@@ -94,7 +102,7 @@ async function main() {
   const [started] = await db.select().from(debates).where(eq(debates.id, debateId));
   console.log(`\nDebate ${debateId}`);
   console.log(`Topic: ${topic}`);
-  console.log(`Model: ${model} · ${rounds} rounds · token budget ${started.maxTotalTokens}\n`);
+  console.log(`Model: ${provider}/${model} · ${rounds} rounds · token budget ${started.maxTotalTokens}\n`);
 
   for (;;) {
     const outcome = await runStep(db, debateId, {
@@ -110,7 +118,8 @@ async function main() {
       );
       if (outcome.debateCompleted) break;
     } else if (outcome.kind === "waiting") {
-      console.log(`\n   Model unreachable (${outcome.error}). Is Ollama running? Retrying…`);
+      const wait = Math.round((outcome.nextAttemptAt - Date.now()) / 1000);
+      console.log(`\n   Model unavailable (${outcome.error}). Retrying in ${wait} s…`);
       await sleep(Math.max(0, outcome.nextAttemptAt - Date.now()));
     } else if (outcome.kind === "retrying") {
       console.log(`\n   Bad turn (${outcome.error}); retry ${outcome.retryCount}…`);

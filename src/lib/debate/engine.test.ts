@@ -5,6 +5,7 @@ import { debateParticipants, debates, turns } from "../db/schema";
 import { VOTING_DURATIONS } from "../validation/debate";
 import {
   createTestDb,
+  rateLimitedModel,
   resolverFor,
   scriptedModel,
   seedAgent,
@@ -12,7 +13,16 @@ import {
   testClock,
   unreachableModel,
 } from "../../test/helpers";
-import { MAX_BAD_TURN_RETRIES, runStep, WAITING_FOR_MODEL, waitDelayMs } from "./engine";
+import {
+  isModelUnreachable,
+  isRateLimited,
+  MAX_BAD_TURN_RETRIES,
+  RATE_LIMITED,
+  retryAfterMs,
+  runStep,
+  WAITING_FOR_MODEL,
+  waitDelayMs,
+} from "./engine";
 import { createDebate, enter, startDebate } from "./lifecycle";
 import { runOnce } from "./runner";
 
@@ -149,6 +159,21 @@ describe("runStep", () => {
     expect(d).toMatchObject({ waitingReason: null, waitAttempts: 0, nextAttemptAt: null });
   });
 
+  it("waits on a rate limit (HTTP 429), honouring retry-after, instead of failing", async () => {
+    const debateId = await startedDebate(2);
+    const outcome = await runStep(db, debateId, {
+      resolveModel: resolverFor(rateLimitedModel(3600)),
+      now: clock.now,
+    });
+    expect(outcome).toMatchObject({ kind: "waiting", nextAttemptAt: clock.now() + 3600_000 });
+    expect(await getDebate(debateId)).toMatchObject({ status: "running", waitingReason: RATE_LIMITED, retryCount: 0 });
+
+    // Without retry-after, the normal growing backoff applies.
+    clock.advance(3600_000);
+    const again = await runStep(db, debateId, { resolveModel: resolverFor(rateLimitedModel()), now: clock.now });
+    expect(again).toMatchObject({ kind: "waiting", nextAttemptAt: clock.now() + waitDelayMs(2) });
+  });
+
   it("retries a bad (empty) turn twice, then fails the debate", async () => {
     const debateId = await startedDebate(2);
     const empty = { resolveModel: resolverFor(scriptedModel(["   "])), now: clock.now };
@@ -205,6 +230,26 @@ describe("runStep", () => {
     });
     const seen = (await Promise.all(reads)).map((rows) => rows[0]);
     expect(seen.some((r) => r?.status === "streaming" && r.content.length > 0)).toBe(true);
+  });
+});
+
+describe("error classification", () => {
+  it("treats connection failures, timeouts, overload and rate limits as 'wait', other errors as 'bad turn'", () => {
+    expect(isModelUnreachable(Object.assign(new Error("x"), { cause: { code: "ECONNREFUSED" } }))).toBe(true);
+    expect(isModelUnreachable(Object.assign(new Error("slow"), { name: "TimeoutError" }))).toBe(true);
+    expect(isModelUnreachable({ statusCode: 503, message: "overloaded" })).toBe(true);
+    expect(isModelUnreachable({ statusCode: 429, message: "slow down" })).toBe(true);
+    expect(isModelUnreachable({ statusCode: 404, message: "model 'nope' not found" })).toBe(false);
+    expect(isModelUnreachable(new Error("GROQ_API_KEY is not set"))).toBe(false);
+  });
+
+  it("reads retry-after as seconds or an HTTP date, only for rate limits", () => {
+    const now = 1_700_000_000_000;
+    expect(isRateLimited({ statusCode: 429 })).toBe(true);
+    expect(retryAfterMs({ statusCode: 429, responseHeaders: { "Retry-After": "30" } }, now)).toBe(30_000);
+    const date = new Date(now + 90_000).toUTCString();
+    expect(retryAfterMs({ statusCode: 429, responseHeaders: { "retry-after": date } }, now)).toBe(90_000);
+    expect(retryAfterMs({ statusCode: 429, responseHeaders: {} }, now)).toBeUndefined();
   });
 });
 

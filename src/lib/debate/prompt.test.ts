@@ -144,6 +144,12 @@ describe("resolveSettings and callSettings", () => {
     expect(resolveSettings("anthropic", "wild", "short")).toEqual({ temperature: 1.0, maxOutputTokens: 120 });
   });
 
+  it("gives Groq the same temperatures as Ollama, through the generic settings", () => {
+    expect(resolveSettings("groq", "wild", "medium")).toEqual({ temperature: 1.3, maxOutputTokens: 220 });
+    const s = callSettings("groq", { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
+    expect(s).toEqual({ temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
+  });
+
   it("sends Ollama its native options", () => {
     const s = callSettings("ollama", { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
     expect(s.providerOptions?.ollama.options).toEqual({ temperature: 0.7, num_predict: 220, stop: ["\nBram:"] });

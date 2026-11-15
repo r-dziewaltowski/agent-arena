@@ -10,7 +10,7 @@ export const agentSchema = z.object({
   style: freeTrait,
   tone: freeTrait,
   stance: z.enum(STANCES as [string, ...string[]]),
-  provider: z.enum(["ollama", "anthropic"]).default("ollama"),
+  provider: z.enum(["ollama", "groq", "anthropic"]).default("ollama"),
   modelId: z.string().trim().min(1).max(100),
   creativity: z.enum(CREATIVITY_LEVELS).default("balanced"),
   turnLength: z.enum(TURN_LENGTHS).default("medium"),

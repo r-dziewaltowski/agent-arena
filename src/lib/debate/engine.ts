@@ -21,6 +21,9 @@ const BAD_TURN_RETRY_DELAY_MS = 5_000;
 const WAIT_BASE_MS = 30_000;
 const WAIT_MAX_MS = 10 * 60_000;
 export const WAITING_FOR_MODEL = "Waiting for the model to become available.";
+export const RATE_LIMITED = "The model's free usage limit was reached; waiting until it resets.";
+/** Longest wait honoured from a provider's retry-after (daily limits can reset hours later). */
+const MAX_RETRY_AFTER_MS = 24 * 60 * 60_000;
 
 export type StepOutcome =
   | { kind: "skipped" }
@@ -189,10 +192,12 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
 
       if (streamError && isModelUnreachable(streamError)) {
         const attempts = debate.waitAttempts + 1;
-        const nextAttemptAt = now() + waitDelayMs(attempts);
+        const limited = isRateLimited(streamError);
+        const delay = Math.max(waitDelayMs(attempts), limited ? (retryAfterMs(streamError) ?? 0) : 0);
+        const nextAttemptAt = now() + delay;
         await db
           .update(debates)
-          .set({ waitAttempts: attempts, nextAttemptAt, waitingReason: WAITING_FOR_MODEL })
+          .set({ waitAttempts: attempts, nextAttemptAt, waitingReason: limited ? RATE_LIMITED : WAITING_FOR_MODEL })
           .where(eq(debates.id, debateId));
         return { kind: "waiting", error, nextAttemptAt };
       }
@@ -283,8 +288,49 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** True for errors meaning the model can't be reached right now (as opposed to a bad reply). */
+type ErrorLike = {
+  name?: string;
+  code?: string;
+  message?: string;
+  statusCode?: number;
+  responseHeaders?: Record<string, string>;
+  cause?: unknown;
+};
+
+function* errorChain(err: unknown): Generator<ErrorLike> {
+  const seen = new Set<unknown>();
+  for (let e: unknown = err; e && !seen.has(e); e = (e as ErrorLike).cause) {
+    seen.add(e);
+    yield e as ErrorLike;
+  }
+}
+
+/** True for HTTP 429: a provider's rate or usage limit. */
+export function isRateLimited(err: unknown): boolean {
+  for (const e of errorChain(err)) if (e.statusCode === 429) return true;
+  return false;
+}
+
+/** The provider's suggested wait from a `retry-after` header (seconds or an HTTP date), if any. */
+export function retryAfterMs(err: unknown, now = Date.now()): number | undefined {
+  for (const e of errorChain(err)) {
+    const headers = e.responseHeaders;
+    if (!headers) continue;
+    const raw = Object.entries(headers).find(([k]) => k.toLowerCase() === "retry-after")?.[1];
+    if (!raw) continue;
+    const seconds = Number(raw);
+    const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(raw) - now;
+    if (Number.isFinite(ms) && ms > 0) return Math.min(ms, MAX_RETRY_AFTER_MS);
+  }
+  return undefined;
+}
+
+/**
+ * True for errors meaning the model can't be used right now (unreachable, overloaded or
+ * rate-limited) as opposed to a bad reply. These make the debate wait instead of failing.
+ */
 export function isModelUnreachable(err: unknown): boolean {
+  if (isRateLimited(err)) return true;
   const patterns = [
     /ECONNREFUSED/i,
     /ECONNRESET/i,
@@ -297,13 +343,11 @@ export function isModelUnreachable(err: unknown): boolean {
     /timed? ?out/i,
     /aborted/i,
   ];
-  for (let e: unknown = err; e; e = (e as { cause?: unknown }).cause) {
-    const obj = e as { name?: string; code?: string; message?: string; statusCode?: number };
-    if (obj.name === "AbortError" || obj.name === "TimeoutError") return true;
-    if (typeof obj.statusCode === "number" && [502, 503, 504].includes(obj.statusCode)) return true;
-    const haystack = `${obj.code ?? ""} ${obj.message ?? String(e)}`;
+  for (const e of errorChain(err)) {
+    if (e.name === "AbortError" || e.name === "TimeoutError") return true;
+    if (typeof e.statusCode === "number" && [502, 503, 504].includes(e.statusCode)) return true;
+    const haystack = `${e.code ?? ""} ${e.message ?? String(e)}`;
     if (patterns.some((p) => p.test(haystack))) return true;
-    if (e === (e as { cause?: unknown }).cause) break;
   }
   return false;
 }

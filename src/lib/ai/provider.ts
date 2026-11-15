@@ -1,17 +1,33 @@
+import { createGroq } from "@ai-sdk/groq";
 import type { LanguageModel } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import type { Creativity, TurnLength } from "../debate/traits";
 
-export type Provider = "ollama" | "anthropic";
+export type Provider = "ollama" | "groq" | "anthropic";
 
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434/api";
 export const DEFAULT_OLLAMA_MODEL = "llama3.2";
+/** Groq's free tier, on an account with no payment method, so it can never be billed. */
+export const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 
 /** Creativity labels mapped to temperature, per provider (Claude only accepts 0-1). */
 const TEMPERATURES: Record<Provider, Record<Creativity, number>> = {
   ollama: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
+  groq: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
   anthropic: { focused: 0.2, balanced: 0.6, creative: 0.8, wild: 1.0 },
 };
+
+/** The default model for a provider, overridable per environment. */
+export function defaultModelFor(provider: Provider): string {
+  switch (provider) {
+    case "ollama":
+      return process.env.OLLAMA_DEFAULT_MODEL ?? DEFAULT_OLLAMA_MODEL;
+    case "groq":
+      return process.env.GROQ_DEFAULT_MODEL ?? DEFAULT_GROQ_MODEL;
+    case "anthropic":
+      return "claude-haiku-5-5";
+  }
+}
 
 const MAX_OUTPUT_TOKENS: Record<TurnLength, number> = { short: 120, medium: 220, long: 400 };
 
@@ -60,6 +76,11 @@ export const resolveModel: ModelResolver = (provider, modelId) => {
         baseURL: process.env.OLLAMA_BASE_URL ?? DEFAULT_OLLAMA_BASE_URL,
       });
       return ollama(modelId);
+    }
+    case "groq": {
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) throw new Error("GROQ_API_KEY is not set, so Groq models can't be used.");
+      return createGroq({ apiKey })(modelId);
     }
     case "anthropic":
       throw new Error("The Anthropic provider is added in M5.");

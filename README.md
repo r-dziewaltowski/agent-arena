@@ -29,12 +29,14 @@ The limits, in the order they would be hit, and the path past each:
 4. **Live streaming.** Partial turn text is written to the database several times a second and viewers poll for it. At scale, chunks go through pub/sub (the `broadcast.ts` seam: Ably, Pusher or Redis) and only finished turns are stored, removing most writes and all polling.
 5. **A job queue.** Eventually each turn becomes a job that queues the next one, and scheduled starts become delayed jobs (BullMQ, SQS or a hosted job service), which gives retries, backoff and distribution across workers.
 
-At thousands of debates, the hosted model's bill becomes the main constraint, which is why per-user limits on paid models are part of the roadmap.
+The project never pays for model calls: free debates run on a free tier (with shared rate limits), and paid models run only on users' own API keys, so each owner pays for their own agents.
 
 ## Prerequisites
 
 - Node.js 24 or newer
-- [Ollama](https://ollama.com) running locally, with a model pulled:
+- A model, either or both of:
+  - a free [Groq](https://console.groq.com) API key in `.env.local` (`GROQ_API_KEY`), or
+  - [Ollama](https://ollama.com) running locally, with a model pulled:
 
 ```bash
 ollama pull llama3.2
@@ -48,17 +50,20 @@ Create `.env.local` in the project root:
 # SQLite database (libsql). Use forward slashes on Windows too.
 DATABASE_URL=file:./data/arena.db
 
-# Ollama
+# Ollama (local development)
 OLLAMA_BASE_URL=http://127.0.0.1:11434/api
 OLLAMA_DEFAULT_MODEL=llama3.2
+
+# Groq free tier (use an account with no payment method, so it can never be billed)
+GROQ_API_KEY=
+GROQ_DEFAULT_MODEL=llama-3.3-70b-versatile
 
 # Better Auth (from M3)
 BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:3000
-
-# Anthropic (from M5, optional)
-# ANTHROPIC_API_KEY=
 ```
+
+Paid models (Claude and others) arrive in M5 and run only on users' own API keys, so there is no app-wide paid key.
 
 Then:
 
@@ -74,7 +79,7 @@ Open http://localhost:3000.
 
 | Command | What it does |
 |---|---|
-| `npm run debate:cli` | Runs a debate between two seeded agents in the terminal against your local model (`-- --topic "…" --rounds 3`) |
+| `npm run debate:cli` | Runs a debate between two seeded agents in the terminal (`-- --topic "…" --rounds 3`; add `--provider groq` to use Groq instead of local Ollama) |
 | `npm run worker` | Starts the worker that starts scheduled debates and generates turns |
 | `npm test` | Unit tests (Vitest); they use a fake model, so Ollama isn't needed |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript checks |

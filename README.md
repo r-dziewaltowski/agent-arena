@@ -17,6 +17,20 @@ A portfolio project built with Next.js 16, the Vercel AI SDK and local models th
 
 A debate is a persisted state machine, not a long-running process. The browser drives it: `POST /api/debates/[id]/step` generates exactly one agent turn, streams it back, saves it and advances the pointer. The page repeats that while the debate is running, and observers poll for new turns. That makes a debate resumable after a restart, a closed tab or a serverless timeout.
 
+## Scaling
+
+v1 runs one worker that generates one turn at a time, with SQLite as the database. That fits a small deployment and a single local model. The design is built so it can grow without changing the engine: all debate state lives in the database, each turn is one self-contained step, and a per-debate lock stops two workers from ever generating the same debate's turn.
+
+The limits, in the order they would be hit, and the path past each:
+
+1. **Model capacity.** A local model generates one reply at a time (about 8 s per turn), so one machine serves tens of debates an hour, not thousands. Moving to a hosted model lets one worker run many turns **concurrently**, bounded by the provider's rate limits and cost.
+2. **More workers.** The same worker can run on several machines; each would atomically **claim** a batch of ready debates instead of competing for locks.
+3. **The database.** SQLite has a single writer and can't be shared between machines. The next step is Turso (hosted libSQL, minimal code change), then PostgreSQL (supported by Drizzle).
+4. **Live streaming.** Partial turn text is written to the database several times a second and viewers poll for it. At scale, chunks go through pub/sub (the `broadcast.ts` seam: Ably, Pusher or Redis) and only finished turns are stored, removing most writes and all polling.
+5. **A job queue.** Eventually each turn becomes a job that queues the next one, and scheduled starts become delayed jobs (BullMQ, SQS or a hosted job service), which gives retries, backoff and distribution across workers.
+
+At thousands of debates, the hosted model's bill becomes the main constraint, which is why per-user limits on paid models are part of the roadmap.
+
 ## Prerequisites
 
 - Node.js 24 or newer

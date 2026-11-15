@@ -173,6 +173,20 @@ The model is the bigger cost question than the runner: wherever the app runs, it
 - Debate modes: binary choice (each entrant picks for/against), multiple choice (creator lists options, each entrant defends one), free discussion (today's behaviour, the default).
 - Push instead of polling: replace the `broadcast.ts` no-op with hosted pub/sub (Ably, Pusher or Upstash) or an SSE route, so viewers get chunks pushed rather than polling. Polling stays as the fallback.
 
+## Scaling path (not planned for v1)
+
+v1 deliberately runs one worker, one generation at a time, on SQLite: local Ollama handles one request well, and the project is small. What already makes it scalable: state lives in the database, one turn per `runStep`, a per-debate lock, and `runStep` doesn't care who calls it. Limits in the order they would be hit, with the change for each:
+
+| Limit | Symptom | Change |
+|---|---|---|
+| Model capacity | A local model does ~450 turns/hour (~8 s each); with 1,000 running debates each gets a turn every ~2 h | Hosted model + a concurrency limit in `runner.ts` (run N steps in parallel); bounded by provider rate limits and cost |
+| One worker | A single process is a single point of failure and throughput cap | Run several workers; replace "list ready debates, then lock each" with an atomic claim (one `UPDATE … WHERE id IN (SELECT … LIMIT n) RETURNING`) so workers don't contend |
+| SQLite | One writer at a time; can't be shared across machines | Turso (libSQL server, little code change), then PostgreSQL (rewrite the Drizzle schema files for the pg dialect) |
+| Partial-text writes and polling | ~3 writes/s per streaming turn plus one poll/s per viewer | Push chunks through pub/sub via `broadcast.ts` (Ably, Pusher, Redis) and store only finished turns; viewers subscribe instead of polling |
+| The loop itself | Polling the database for work doesn't distribute well | A job queue: each finished turn enqueues the next, scheduled starts are delayed jobs (BullMQ, SQS, Inngest/QStash), with retries and backoff built in |
+
+Cost: at thousands of debates the hosted model's bill dominates; the M5 cost controls (admin-only or per-user limits) are the first line of defence. The README carries a shorter version of this section.
+
 ## Known gotchas to handle during implementation
 
 - Windows + libsql: use `file:./data/arena.db` (forward slashes). If the native binary fails on Node 24+, switch dev driver to `better-sqlite3`; the Drizzle schema stays the same.

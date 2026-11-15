@@ -149,7 +149,7 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
         model,
         system: prompt.system,
         messages: prompt.messages,
-        ...callSettings(provider, {
+        ...callSettings(provider, speakerRow.modelId ?? "", {
           temperature: speakerRow.temperature ?? undefined,
           maxOutputTokens: speakerRow.maxOutputTokens ?? undefined,
           stopSequences: prompt.stopSequences,

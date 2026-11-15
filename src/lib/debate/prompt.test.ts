@@ -144,15 +144,20 @@ describe("resolveSettings and callSettings", () => {
     expect(resolveSettings("anthropic", "wild", "short")).toEqual({ temperature: 1.0, maxOutputTokens: 120 });
   });
 
-  it("gives Groq the same temperatures as Ollama, through the generic settings", () => {
+  it("gives Groq the same temperatures as Ollama, with minimal hidden reasoning per model family", () => {
     expect(resolveSettings("groq", "wild", "medium")).toEqual({ temperature: 1.3, maxOutputTokens: 220 });
-    const s = callSettings("groq", { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
-    expect(s).toEqual({ temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
+    const base = { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] };
+    expect(callSettings("groq", "openai/gpt-oss-120b", base)).toEqual({
+      ...base,
+      providerOptions: { groq: { reasoningEffort: "low", reasoningFormat: "hidden" } },
+    });
+    expect(callSettings("groq", "qwen/qwen3.8-27b", base).providerOptions?.groq?.reasoningEffort).toBe("none");
+    expect(callSettings("groq", "some-other-model", base)).toEqual(base);
   });
 
   it("sends Ollama its native options", () => {
-    const s = callSettings("ollama", { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
-    expect(s.providerOptions?.ollama.options).toEqual({ temperature: 0.7, num_predict: 220, stop: ["\nBram:"] });
+    const s = callSettings("ollama", "llama3.2", { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
+    expect(s.providerOptions?.ollama?.options).toEqual({ temperature: 0.7, num_predict: 220, stop: ["\nBram:"] });
     expect(s.stopSequences).toBeUndefined();
   });
 });

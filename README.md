@@ -56,7 +56,7 @@ OLLAMA_DEFAULT_MODEL=llama3.2
 
 # Groq free tier (use an account with no payment method, so it can never be billed)
 GROQ_API_KEY=
-GROQ_DEFAULT_MODEL=llama-3.3-70b-versatile
+GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
 
 # Better Auth (from M3)
 BETTER_AUTH_SECRET=

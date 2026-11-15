@@ -11,31 +11,35 @@ A portfolio project built with Next.js 16, the Vercel AI SDK and local models th
 | Area | Choice |
 |---|---|
 | App | Next.js 16 (App Router), TypeScript, Tailwind CSS v4 |
-| LLM | Vercel AI SDK v7 (`ai`) behind a provider seam; Ollama locally, Claude later |
-| Data | SQLite via Drizzle ORM and `@libsql/client` (file locally, Turso later) |
-| Auth | Better Auth (email and password, GitHub OAuth later) |
+| LLM | Vercel AI SDK v7 (`ai`) behind a provider seam; Ollama locally, Groq's free tier hosted, paid models later on users' own keys |
+| Data | SQLite via Drizzle ORM and `@libsql/client` (file locally, Turso in production) |
+| Auth | Better Auth (email and password, GitHub OAuth) |
+| Hosting (M4) | Vercel + Turso + Upstash QStash, all on free tiers |
 
 ## How a debate runs
 
-A debate is a persisted state machine, not a long-running process. The browser drives it: `POST /api/debates/[id]/step` generates exactly one agent turn, streams it back, saves it and advances the pointer. The page repeats that while the debate is running, and observers poll for new turns. That makes a debate resumable after a restart, a closed tab or a serverless timeout.
+A debate is a persisted state machine, not a long-running process. Each step (`runStep`) generates exactly one agent turn, writes the text to the database as the model streams it, saves the turn and advances the pointer. Debates run whether or not anyone is watching: viewers only poll for new text and never trigger a model call. Because every step is saved, a debate resumes after a restart.
+
+A queue (Upstash QStash) drives the steps. Each queued message makes QStash call the app's `/api/jobs/advance` route, which runs one step and queues the next message: right away, or after a delay while the model is rate-limited or unreachable. Starting a debate queues its first message, and a scheduled debate gets a delayed message for its start time. A sweep every few minutes restarts any debate whose chain of messages was lost. The job routes accept only calls signed by the queue. There is no always-on process, so the app runs on serverless hosting. Locally, `npm run dev` runs QStash's dev server in Docker, so turns are triggered the same way as in production. See [docs/plan.md](docs/plan.md).
 
 ## Scaling
 
-v1 runs one worker that generates one turn at a time, with SQLite as the database. That fits a small deployment and a single local model. The design is built so it can grow without changing the engine: all debate state lives in the database, each turn is one self-contained step, and a per-debate lock stops two workers from ever generating the same debate's turn.
+All debate state lives in the database, each turn is one self-contained step, and a per-debate lock stops two calls from ever generating the same debate's turn. Because a queue drives the steps rather than a process, turns of different debates already run in parallel (capped by the queue's flow control), and more debates simply mean more function calls, with no workers to add or coordinate. (Until M4 a single polling worker did this, one turn at a time.)
 
 The limits, in the order they would be hit, and the path past each:
 
-1. **Model capacity.** A local model generates one reply at a time (about 8 s per turn), so one machine serves tens of debates an hour, not thousands. Moving to a hosted model lets one worker run many turns **concurrently**, bounded by the provider's rate limits and cost.
-2. **More workers.** The same worker can run on several machines; each would atomically **claim** a batch of ready debates instead of competing for locks.
-3. **The database.** SQLite has a single writer and can't be shared between machines. The next step is Turso (hosted libSQL, minimal code change), then PostgreSQL (supported by Drizzle).
+1. **Model rate limits.** The free tier caps requests per minute and per day, shared by all users. Flow control keeps within the per-minute limit; heavier use moves to paid models on users' own keys.
+2. **The queue's free tier.** About 1,000 messages a day (one per turn, plus the sweep), roughly 40-50 debates. Past that, QStash's pay-as-you-go plan, or another queue behind the `queue.ts` seam.
+3. **The database.** SQLite (Turso in production) has a single writer. The next step is PostgreSQL (supported by Drizzle).
 4. **Live streaming.** Partial turn text is written to the database several times a second and viewers poll for it. At scale, chunks go through pub/sub (the `broadcast.ts` seam: Ably, Pusher or Redis) and only finished turns are stored, removing most writes and all polling.
-5. **A job queue.** Eventually each turn becomes a job that queues the next one, and scheduled starts become delayed jobs (BullMQ, SQS or a hosted job service), which gives retries, backoff and distribution across workers.
+5. **Serverless plan limits.** Function duration and the free plan's non-commercial terms. A paid plan, or the same app on a container host; nothing in the code depends on Vercel.
 
 The project never pays for model calls: free debates run on a free tier (with shared rate limits), and paid models run only on users' own API keys, so each owner pays for their own agents.
 
 ## Prerequisites
 
 - Node.js 24 or newer
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/), running: `npm run dev` starts QStash's local dev server in it (on Windows, QStash's standalone dev server binary is unsigned, so Smart App Control blocks it; Docker avoids that)
 - A model, either or both of:
   - a free [Groq](https://console.groq.com) API key in `.env.local` (`GROQ_API_KEY`), or
   - [Ollama](https://ollama.com) running locally, with a model pulled:
@@ -67,6 +71,18 @@ BETTER_AUTH_URL=http://localhost:3000
 # Optional: "Continue with GitHub" (shown only when both are set)
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+
+# Job queue (Upstash QStash). Locally: the dev server that `npm run dev` starts in Docker.
+# Copy the token and both signing keys from its startup output (they are its built-in test values).
+QSTASH_URL=http://127.0.0.1:8080
+QSTASH_TOKEN=
+QSTASH_CURRENT_SIGNING_KEY=
+QSTASH_NEXT_SIGNING_KEY=
+# Optional. Where the queue calls the app; locally defaults to http://host.docker.internal:3000,
+# the address of this machine as seen from inside Docker.
+# APP_URL=
+# Optional. How many turns may run at once (default 1 locally, 2 in production).
+# TURN_PARALLELISM=
 ```
 
 Generate the secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. In development Better Auth falls back to a built-in secret with a warning; production builds refuse to start without one.
@@ -85,7 +101,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Open http://localhost:3000. `npm run dev` applies migrations, then starts the web app and the debate worker together (their output is prefixed `[web]` and `[worker]`).
+Open http://localhost:3000. `npm run dev` applies migrations, then starts the web app and the QStash dev server together (their output is prefixed `[web]` and `[queue]`). The first run downloads the dev server's Docker image. The dev server keeps everything in memory, so after a restart the sweep picks up running debates within a minute or two.
 
 Create an account from the header (email and password; your display name is shown, your email never is). For local testing, `npm run db:seed-dev` creates three dev accounts, Alice (admin), Bob and Carol, with the password in `scripts/seed-dev-accounts.ts`: sign in as two of them in different browsers to enter agents into the same debate and vote. Admin rights are set by hand in the database (`user.is_admin`).
 
@@ -94,7 +110,9 @@ Create an account from the header (email and password; your display name is show
 | Command | What it does |
 |---|---|
 | `npm run debate:cli` | Runs a debate between two seeded agents in the terminal (`-- --topic "…" --rounds 3`; add `--provider groq` to use Groq instead of local Ollama) |
-| `npm run worker` | Starts the worker that starts scheduled debates and generates turns |
+| `npm run dev:web` | Starts only the web app, without the queue (debates won't advance) |
+| `npm run queue:dev` | Starts only the QStash dev server in Docker |
+| `npm run queue:setup` | Creates the sweep schedule on a deployment (`APP_URL=https://… npm run queue:setup`) |
 | `npm test` | Unit tests (Vitest); they use a fake model, so Ollama isn't needed |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript checks |
 | `npm run db:generate` | Creates a migration after a schema change |

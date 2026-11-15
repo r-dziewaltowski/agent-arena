@@ -2,7 +2,6 @@ import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { catalogAvailability } from "../ai/models";
 import type { Db } from "../db/client";
 import { debateParticipants, debates, turns } from "../db/schema";
 import { VOTING_DURATIONS } from "../validation/debate";
@@ -27,7 +26,6 @@ import {
   waitDelayMs,
 } from "./engine";
 import { createDebate, enter, startDebate } from "./lifecycle";
-import { runOnce } from "./runner";
 
 let db: Db;
 let cleanup: () => void;
@@ -315,29 +313,3 @@ describe("error classification", () => {
   });
 });
 
-describe("runOnce", () => {
-  it("starts due scheduled debates and gives every running debate a turn", async () => {
-    const at = clock.now() + 60_000;
-    const scheduled = await createDebate(
-      db,
-      "alice",
-      { topic: "Scheduled topic here", maxParticipants: 3, startMode: "scheduled", startAt: at },
-      clock.now(),
-    );
-    await enter(db, { debateId: scheduled, userId: "alice", agentId: await seedAgent(db, "alice"), position: 1 });
-    await enter(db, { debateId: scheduled, userId: "bob", agentId: await seedAgent(db, "bob"), position: 2 });
-    const manual = await startedDebate(2);
-
-    clock.set(at);
-    const result = await runOnce(db, {
-      resolveModel: resolverFor(scriptedModel(["A point."])),
-      now: clock.now,
-      getAvailability: async () => catalogAvailability(),
-    });
-    expect(result.started).toEqual([scheduled]);
-    expect(result.steps.map((s) => [s.debateId, s.outcome.kind])).toEqual([
-      [manual, "turn"],
-      [scheduled, "turn"],
-    ]);
-  });
-});

@@ -292,25 +292,50 @@ export async function startDueScheduled(
   const started: string[] = [];
   const cancelled: string[] = [];
   for (const { id } of due) {
-    await db.transaction(async (tx) => {
-      const entries = await tx
-        .select({ id: debateParticipants.id })
-        .from(debateParticipants)
-        .where(eq(debateParticipants.debateId, id));
-      if (entries.length >= 2) {
-        await startInTx(tx, id, now, availability);
-        started.push(id);
-      } else {
-        const rows = await tx
-          .update(debates)
-          .set({ status: "cancelled", cancelReason: NOT_ENOUGH_AT_START_REASON })
-          .where(and(eq(debates.id, id), eq(debates.status, "open")))
-          .returning({ id: debates.id });
-        if (rows.length) cancelled.push(id);
-      }
-    });
+    const result = await startOrCancelScheduled(db, id, now, availability);
+    if (result === "started") started.push(id);
+    if (result === "cancelled") cancelled.push(id);
   }
   return { started, cancelled };
+}
+
+/**
+ * Starts one scheduled debate whose start time has passed, or cancels it with fewer than 2
+ * entries. Returns "unchanged" when it isn't an open scheduled debate that is due (already
+ * started, deleted, not due yet), so calling it twice is harmless.
+ */
+export async function startOrCancelScheduled(
+  db: Db,
+  debateId: string,
+  now = Date.now(),
+  availability?: ModelAvailability,
+): Promise<"started" | "cancelled" | "unchanged"> {
+  return db.transaction(async (tx) => {
+    const [debate] = await tx.select().from(debates).where(eq(debates.id, debateId));
+    if (
+      !debate ||
+      debate.status !== "open" ||
+      debate.startMode !== "scheduled" ||
+      debate.startAt === null ||
+      debate.startAt > now
+    ) {
+      return "unchanged";
+    }
+    const entries = await tx
+      .select({ id: debateParticipants.id })
+      .from(debateParticipants)
+      .where(eq(debateParticipants.debateId, debateId));
+    if (entries.length >= 2) {
+      await startInTx(tx, debateId, now, availability);
+      return "started";
+    }
+    const rows = await tx
+      .update(debates)
+      .set({ status: "cancelled", cancelReason: NOT_ENOUGH_AT_START_REASON })
+      .where(and(eq(debates.id, debateId), eq(debates.status, "open")))
+      .returning({ id: debates.id });
+    return rows.length ? "cancelled" : "unchanged";
+  });
 }
 
 /**

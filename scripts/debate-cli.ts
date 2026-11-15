@@ -15,7 +15,7 @@ import { runMigrations } from "../src/lib/db/migrate";
 import { agents, debates, turns, user } from "../src/lib/db/schema";
 import { runStep } from "../src/lib/debate/engine";
 import { createDebate, enter, startDebate } from "../src/lib/debate/lifecycle";
-import { sleep } from "../src/lib/debate/runner";
+import { setTimeout as sleep } from "node:timers/promises";
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);

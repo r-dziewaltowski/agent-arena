@@ -14,7 +14,7 @@ import { votingClosesAtFor } from "./lifecycle";
 import { buildPrompt, cleanTurnText, trimToLastSentence, turnKindFor, type Speaker } from "./prompt";
 import { maybeFoldSummary } from "./summarize";
 
-/** A lock older than this is considered abandoned (e.g. the worker crashed). */
+/** A lock older than this is considered abandoned (e.g. the function was killed mid-turn). */
 export const LOCK_TTL_MS = 90_000;
 /** Bad turns are retried this many times before the debate fails. */
 export const MAX_BAD_TURN_RETRIES = 2;

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "predev": "tsx scripts/migrate.ts",
-    "dev": "concurrently --kill-others --names web,worker --prefix-colors blue,magenta \"next dev\" \"tsx scripts/worker.ts\"",
+    "dev": "concurrently --kill-others --names web,queue --prefix-colors blue,magenta \"next dev\" \"tsx scripts/queue-dev.ts\"",
     "dev:web": "next dev",
     "build": "next build",
     "start": "next start",
@@ -15,12 +15,14 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed-dev": "tsx scripts/seed-dev-accounts.ts",
-    "worker": "tsx scripts/worker.ts",
-    "debate:cli": "tsx scripts/debate-cli.ts"
+    "debate:cli": "tsx scripts/debate-cli.ts",
+    "queue:dev": "tsx scripts/queue-dev.ts",
+    "queue:setup": "tsx scripts/setup-queue.ts"
   },
   "dependencies": {
     "@ai-sdk/groq": "^4.0.84",
     "@libsql/client": "^0.18.0",
+    "@upstash/qstash": "^2.12.2",
     "ai": "^7.0.173",
     "better-auth": "^1.7.25",
     "drizzle-orm": "^0.45.4",

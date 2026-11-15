@@ -2,6 +2,7 @@ import { createGroq } from "@ai-sdk/groq";
 import type { LanguageModel } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import type { Creativity, TurnLength } from "../debate/traits";
+import { findModel } from "./models";
 
 export type Provider = "ollama" | "groq" | "anthropic";
 
@@ -13,11 +14,16 @@ export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 /**
  * Groq's current chat models reason before answering, and reasoning tokens count against the
  * turn's token cap. Keep reasoning minimal and hidden so the cap goes to the actual turn.
- * gpt-oss can't switch reasoning off (lowest is "low"); Qwen can ("none").
+ * Settings come from the model catalog; for ids not in it, guess from the name
+ * (gpt-oss can't switch reasoning off, lowest is "low"; Qwen can, "none").
  */
 export function groqReasoningOptions(
   modelId: string,
 ): { reasoningEffort: "none" | "low"; reasoningFormat: "hidden" } | undefined {
+  const entry = findModel("groq", modelId);
+  if (entry) {
+    return entry.reasoning ? { reasoningEffort: entry.reasoning.effort, reasoningFormat: entry.reasoning.format } : undefined;
+  }
   if (modelId.includes("gpt-oss")) return { reasoningEffort: "low", reasoningFormat: "hidden" };
   if (/qwen3/i.test(modelId)) return { reasoningEffort: "none", reasoningFormat: "hidden" };
   return undefined;

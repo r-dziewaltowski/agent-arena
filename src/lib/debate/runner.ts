@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { catalogAvailability, listOllamaModels, type ModelAvailability } from "../ai/models";
 import type { Db } from "../db/client";
 import { debates } from "../db/schema";
 import { runStep, type StepOptions, type StepOutcome } from "./engine";
@@ -15,9 +16,24 @@ export type RunOnceResult = {
  * for each running debate that is ready. One generation at a time, since local Ollama handles one
  * request well; debates take turns, so none of them starves.
  */
-export async function runOnce(db: Db, opts: StepOptions = {}): Promise<RunOnceResult> {
+export type RunnerOptions = StepOptions & {
+  /** Which models can still be used, checked when a scheduled debate starts. */
+  getAvailability?: () => Promise<ModelAvailability>;
+};
+
+const defaultAvailability = async () => catalogAvailability(await listOllamaModels());
+
+export async function runOnce(db: Db, opts: RunnerOptions = {}): Promise<RunOnceResult> {
   const now = opts.now ?? Date.now;
-  const { started, cancelled } = await startDueScheduled(db, now());
+  const [due] = await db
+    .select({ id: debates.id })
+    .from(debates)
+    .where(and(eq(debates.status, "open"), eq(debates.startMode, "scheduled"), lte(debates.startAt, now())))
+    .limit(1);
+  // Only ask Ollama what's installed when a scheduled debate is actually due.
+  const { started, cancelled } = due
+    ? await startDueScheduled(db, now(), await (opts.getAvailability ?? defaultAvailability)())
+    : { started: [], cancelled: [] };
 
   const ready = await db
     .select({ id: debates.id })
@@ -40,7 +56,7 @@ export async function runOnce(db: Db, opts: StepOptions = {}): Promise<RunOnceRe
 /** Runs the worker loop until `signal` is aborted. Sleeps only when there was nothing to do. */
 export async function runLoop(
   db: Db,
-  opts: StepOptions & {
+  opts: RunnerOptions & {
     intervalMs?: number;
     signal?: AbortSignal;
     onPass?: (result: RunOnceResult) => void;

@@ -75,7 +75,9 @@ npm run db:migrate
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. `npm run dev` applies migrations, then starts the web app and the debate worker together (their output is prefixed `[web]` and `[worker]`).
+
+Until accounts arrive, the header has a **dev user switcher** (Alice, Bob, Carol; Alice is an admin), so one browser can act as several people: create agents as two users, enter them into the same debate and watch it run.
 
 ## Useful commands
 

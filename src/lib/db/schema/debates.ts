@@ -95,6 +95,8 @@ export const debateParticipants = sqliteTable(
     turnLength: text("turn_length"),
     temperature: real("temperature"),
     maxOutputTokens: integer("max_output_tokens"),
+    /** The agent's chosen model when it was retired and the provider default ran instead. */
+    modelFallbackFrom: text("model_fallback_from"),
   },
   (t) => [
     index("participants_debate_idx").on(t.debateId),

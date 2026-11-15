@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { catalogAvailability } from "../ai/models";
 import type { Db } from "../db/client";
 import { debateParticipants, debates, turns } from "../db/schema";
 import { VOTING_DURATIONS } from "../validation/debate";
@@ -267,7 +268,11 @@ describe("runOnce", () => {
     const manual = await startedDebate(2);
 
     clock.set(at);
-    const result = await runOnce(db, { resolveModel: resolverFor(scriptedModel(["A point."])), now: clock.now });
+    const result = await runOnce(db, {
+      resolveModel: resolverFor(scriptedModel(["A point."])),
+      now: clock.now,
+      getAvailability: async () => catalogAvailability(),
+    });
     expect(result.started).toEqual([scheduled]);
     expect(result.steps.map((s) => [s.debateId, s.outcome.kind])).toEqual([
       [manual, "turn"],

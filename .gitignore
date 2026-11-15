@@ -37,6 +37,9 @@ yarn-error.log*
 # local sqlite database
 /data/
 
+# local Claude Code tooling
+/.claude/
+
 # vercel
 .vercel
 

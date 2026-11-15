@@ -1,0 +1,1 @@
+ALTER TABLE `debate_participants` ADD `model_fallback_from` text;

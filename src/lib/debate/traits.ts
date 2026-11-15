@@ -57,6 +57,24 @@ export type Creativity = (typeof CREATIVITY_LEVELS)[number];
 export const TURN_LENGTHS = ["short", "medium", "long"] as const;
 export type TurnLength = (typeof TURN_LENGTHS)[number];
 
+export const CREATIVITY_LABELS: Record<Creativity, { label: string; hint: string }> = {
+  focused: { label: "Focused", hint: "Tight and consistent" },
+  balanced: { label: "Balanced", hint: "Natural, with some variety" },
+  creative: { label: "Creative", hint: "Bolder phrasing and ideas" },
+  wild: { label: "Wild", hint: "Unpredictable; may drift" },
+};
+
+export const TURN_LENGTH_LABELS: Record<TurnLength, { label: string; hint: string }> = {
+  short: { label: "Short", hint: "About 70 words" },
+  medium: { label: "Medium", hint: "About 130 words" },
+  long: { label: "Long", hint: "About 240 words" },
+};
+
+/** "socratic" → "Socratic"; custom text is shown as written. */
+export function traitLabel(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export function isStylePreset(value: string): value is StylePreset {
   return Object.hasOwn(STYLE_PRESETS, value);
 }

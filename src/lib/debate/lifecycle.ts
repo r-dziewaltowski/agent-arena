@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, lte } from "drizzle-orm";
-import { resolveSettings, type Provider } from "../ai/provider";
+import { catalogAvailability, type ModelAvailability } from "../ai/models";
+import { defaultModelFor, resolveSettings, type Provider } from "../ai/provider";
 import type { Db } from "../db/client";
 import { agents, debateParticipants, debates, turns, votes } from "../db/schema";
 import { createDebateSchema, VOTING_DURATIONS, type CreateDebateInput, type VotingDuration } from "../validation/debate";
@@ -110,6 +111,7 @@ export async function enter(
   db: Db,
   args: { debateId: string; userId: string; agentId: string; position: number },
   now = Date.now(),
+  availability?: ModelAvailability,
 ): Promise<string> {
   return db.transaction(async (tx) => {
     const debate = await loadDebate(tx, args.debateId);
@@ -154,7 +156,7 @@ export async function enter(
     }
 
     if (debate.startMode === "when_full" && entries.length + 1 >= debate.maxParticipants) {
-      await startInTx(tx, args.debateId, now);
+      await startInTx(tx, args.debateId, now, availability);
     }
     return id;
   });
@@ -182,6 +184,7 @@ export async function startDebate(
   db: Db,
   args: { debateId: string; userId: string },
   now = Date.now(),
+  availability?: ModelAvailability,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const debate = await loadDebate(tx, args.debateId);
@@ -191,7 +194,7 @@ export async function startDebate(
     if (debate.startMode !== "manual") {
       throw new LifecycleError("WRONG_START_MODE", "This debate starts automatically.");
     }
-    await startInTx(tx, args.debateId, now);
+    await startInTx(tx, args.debateId, now, availability);
   });
 }
 
@@ -199,7 +202,12 @@ export async function startDebate(
  * Starts a debate inside a transaction: renumbers slots 1..n keeping their order, snapshots each
  * agent (suffixing duplicate names), computes the token budget and marks the debate running.
  */
-export async function startInTx(tx: Tx, debateId: string, now: number): Promise<void> {
+export async function startInTx(
+  tx: Tx,
+  debateId: string,
+  now: number,
+  availability: ModelAvailability = catalogAvailability(),
+): Promise<void> {
   const debate = await loadDebate(tx, debateId);
   if (debate.status !== "open") throw new LifecycleError("NOT_OPEN", "This debate is no longer open.");
 
@@ -225,11 +233,11 @@ export async function startInTx(tx: Tx, debateId: string, now: number): Promise<
   const maxOutputs: number[] = [];
   // Ascending order means each new position is <= the old one and already vacated.
   for (const [i, { entry, agent }] of ordered.entries()) {
-    const settings = resolveSettings(
-      agent.provider as Provider,
-      agent.creativity as Creativity,
-      agent.turnLength as TurnLength,
-    );
+    const provider = agent.provider as Provider;
+    // A retired model never blocks a debate: the provider's default runs instead, and says so.
+    const available = availability.isAvailable(provider, agent.modelId);
+    const modelId = available ? agent.modelId : defaultModelFor(provider);
+    const settings = resolveSettings(provider, agent.creativity as Creativity, agent.turnLength as TurnLength);
     maxOutputs.push(settings.maxOutputTokens);
     await tx
       .update(debateParticipants)
@@ -241,7 +249,8 @@ export async function startInTx(tx: Tx, debateId: string, now: number): Promise<
         tone: agent.tone,
         stance: agent.stance,
         provider: agent.provider,
-        modelId: agent.modelId,
+        modelId,
+        modelFallbackFrom: available ? null : agent.modelId,
         creativity: agent.creativity,
         turnLength: agent.turnLength,
         temperature: settings.temperature,
@@ -271,6 +280,7 @@ export const NOT_ENOUGH_AT_START_REASON =
 export async function startDueScheduled(
   db: Db,
   now = Date.now(),
+  availability?: ModelAvailability,
 ): Promise<{ started: string[]; cancelled: string[] }> {
   const due = await db
     .select({ id: debates.id })
@@ -287,7 +297,7 @@ export async function startDueScheduled(
         .from(debateParticipants)
         .where(eq(debateParticipants.debateId, id));
       if (entries.length >= 2) {
-        await startInTx(tx, id, now);
+        await startInTx(tx, id, now, availability);
         started.push(id);
       } else {
         const rows = await tx

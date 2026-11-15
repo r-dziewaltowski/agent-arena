@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { catalogAvailability } from "../ai/models";
 import type { Db } from "../db/client";
 import { agents, debateParticipants, debates, turns, votes } from "../db/schema";
 import { createTestDb, seedAgent, seedUser } from "../../test/helpers";
@@ -149,6 +150,24 @@ describe("starting", () => {
     const d = await getDebate(debateId);
     expect(d).toMatchObject({ startedAt: NOW, currentRound: 1, currentTurnIndex: 0 });
     expect(d.maxTotalTokens).toBe(computeTokenBudget(2, [400, 220]));
+  });
+
+  it("runs a retired model's agent on the provider default and records what it replaced", async () => {
+    const debateId = await createDebate(db, "alice", manual(), NOW);
+    const retired = await seedAgent(db, "alice", { provider: "groq", modelId: "llama-3.3-70b-versatile" });
+    const current = await seedAgent(db, "bob", { provider: "groq", modelId: "openai/gpt-oss-20b" });
+    const missingOllama = await seedAgent(db, "carol", { provider: "ollama", modelId: "mistral" });
+    await enter(db, { debateId, userId: "alice", agentId: retired, position: 1 });
+    await enter(db, { debateId, userId: "bob", agentId: current, position: 2 });
+    await enter(db, { debateId, userId: "carol", agentId: missingOllama, position: 3 });
+    await startDebate(db, { debateId, userId: "alice" }, NOW, catalogAvailability(["llama3.2:latest"]));
+
+    const entries = await entriesOf(debateId);
+    expect(entries.map((e) => [e.modelId, e.modelFallbackFrom])).toEqual([
+      ["openai/gpt-oss-120b", "llama-3.3-70b-versatile"],
+      ["openai/gpt-oss-20b", null],
+      ["llama3.2", "mistral"],
+    ]);
   });
 
   it("starts a when_full debate on the entry that fills the last slot", async () => {

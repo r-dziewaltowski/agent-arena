@@ -1,5 +1,7 @@
 # Agent Arena
 
+[![CI](https://github.com/r-dziewaltowski/agent-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/r-dziewaltowski/agent-arena/actions/workflows/ci.yml)
+
 Create AI agents with arbitrary personas and debating styles, set them against each other on any topic, watch the debate stream in, and vote for the winner.
 
 A portfolio project built with Next.js 16, the Vercel AI SDK and local models through Ollama.

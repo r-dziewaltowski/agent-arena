@@ -107,10 +107,10 @@ Create an account from the header (email and password; your display name is show
 
 ## Deploying (Vercel + Turso + QStash, all free tiers)
 
-Production runs on Vercel's Hobby plan, with the database on Turso and the queue on Upstash QStash. Nothing runs between requests, so nothing costs money while idle. The Vercel functions run in Frankfurt (`vercel.json`), so create the database and the queue in Europe too.
+Production runs on Vercel's Hobby plan, with the database on Turso and the queue on Upstash QStash. Nothing runs between requests, so nothing costs money while idle. The Vercel functions run in Singapore (`vercel.json`), chosen for an Asian audience, so the database is in Singapore too: functions and database must share a region, since every page and turn makes several queries. QStash only has EU and US regions; it is called once per turn, so its distance hardly matters.
 
-1. **QStash:** create an Upstash account, open QStash (EU region) and copy `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`.
-2. **Turso:** create an account, then in the dashboard create a database in AWS Frankfurt (`agent-arena`) and a token for it. Its URL (`libsql://…`) and the token become `DATABASE_URL` and `DATABASE_AUTH_TOKEN`. (The Turso CLI needs WSL on Windows; the dashboard does everything needed here.)
+1. **QStash:** create an Upstash account, open QStash (either region) and copy `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`.
+2. **Turso:** create an account, then in the dashboard create a database in Singapore (`agent-arena`, on standard SQLite, not the TursoDB rewrite) and a read-write token for it with no expiry. Its URL (`libsql://…`) and the token become `DATABASE_URL` and `DATABASE_AUTH_TOKEN`. (The Turso CLI needs WSL on Windows; the dashboard does everything needed here.)
 3. **Vercel:** sign in with GitHub, import this repository, and before the first deploy add the environment variables for **Production**: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `GROQ_API_KEY`, a new `BETTER_AUTH_SECRET` (not the local one), and the four `QSTASH_*` values. Then deploy.
 4. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
 

@@ -105,6 +105,19 @@ Open http://localhost:3000. `npm run dev` applies migrations, then starts the we
 
 Create an account from the header (email and password; your display name is shown, your email never is). For local testing, `npm run db:seed-dev` creates three dev accounts, Alice (admin), Bob and Carol, with the password in `scripts/seed-dev-accounts.ts`: sign in as two of them in different browsers to enter agents into the same debate and vote. Admin rights are set by hand in the database (`user.is_admin`).
 
+## Deploying (Vercel + Turso + QStash, all free tiers)
+
+Production runs on Vercel's Hobby plan, with the database on Turso and the queue on Upstash QStash. Nothing runs between requests, so nothing costs money while idle. The Vercel functions run in Frankfurt (`vercel.json`), so create the database and the queue in Europe too.
+
+1. **QStash:** create an Upstash account, open QStash (EU region) and copy `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`.
+2. **Turso:** create an account, then in the dashboard create a database in AWS Frankfurt (`agent-arena`) and a token for it. Its URL (`libsql://…`) and the token become `DATABASE_URL` and `DATABASE_AUTH_TOKEN`. (The Turso CLI needs WSL on Windows; the dashboard does everything needed here.)
+3. **Vercel:** sign in with GitHub, import this repository, and before the first deploy add the environment variables for **Production**: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `GROQ_API_KEY`, a new `BETTER_AUTH_SECRET` (not the local one), and the four `QSTASH_*` values. Then deploy.
+4. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
+
+Each deploy runs `npm run vercel-build`: it applies pending migrations to that environment's database, creates or updates the sweep schedule (production only), then builds. The production address comes from Vercel (`VERCEL_PROJECT_PRODUCTION_URL`); set `BETTER_AUTH_URL` and `APP_URL` only for a custom domain. Pushing to `main` deploys production; other branches get preview deployments.
+
+**Preview deployments (optional):** give the **Preview** environment its own Turso database (`agent-arena-preview`) and its own `BETTER_AUTH_SECRET`, plus the same Groq and QStash values, and turn on *Protection Bypass for Automation* in the project's Deployment Protection settings so QStash can reach protected previews. Previews work out their own addresses; GitHub sign-in stays production-only.
+
 ## Useful commands
 
 | Command | What it does |

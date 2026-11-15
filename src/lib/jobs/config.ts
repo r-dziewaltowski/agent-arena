@@ -7,14 +7,17 @@ const isProduction = () => process.env.NODE_ENV === "production";
  * reach that deployment and not production.
  */
 export function appUrl(): string {
-  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
+  const strip = (url: string) => url.replace(/\/$/, "");
+  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (process.env.APP_URL) return strip(process.env.APP_URL);
+  // Vercel's production address (e.g. agent-arena.vercel.app), provided at build and run time.
+  if (process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   }
+  if (isProduction()) return strip(process.env.BETTER_AUTH_URL ?? "http://localhost:3000");
   // Locally the QStash dev server runs in Docker, where "localhost" is the container itself;
   // host.docker.internal is how a container reaches this machine.
-  const fallback = isProduction() ? process.env.BETTER_AUTH_URL : "http://host.docker.internal:3000";
-  const url = process.env.APP_URL ?? fallback ?? "http://localhost:3000";
-  return url.replace(/\/$/, "");
+  return "http://host.docker.internal:3000";
 }
 
 /** How many turns may run at once across all debates (QStash flow control). */

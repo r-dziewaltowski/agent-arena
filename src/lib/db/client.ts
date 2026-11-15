@@ -18,6 +18,10 @@ type Opened = { db: Db; client: Client; ready: Promise<void> };
  * connection runs statements in order, they always run before any later query.
  */
 export function createDb(url = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL): Opened {
+  // On Vercel the file system is read-only and temporary: a missing DATABASE_URL must fail loudly.
+  if (process.env.VERCEL && !process.env.DATABASE_URL && url === DEFAULT_DATABASE_URL) {
+    throw new Error("DATABASE_URL isn't set. On Vercel it must point to the Turso database.");
+  }
   const isFile = url.startsWith("file:");
   if (isFile) {
     const path = url.slice("file:".length);

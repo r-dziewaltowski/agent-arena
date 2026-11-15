@@ -5,10 +5,29 @@ import { getDbSync } from "../db/client";
 import * as schema from "../db/schema";
 
 /**
+ * A Vercel preview has its own addresses (one per deployment, one per branch), so instead of a
+ * fixed BETTER_AUTH_URL it accepts requests for exactly those hosts. Elsewhere Better Auth reads
+ * BETTER_AUTH_URL.
+ */
+function vercelBaseURL() {
+  const env = process.env;
+  if (env.VERCEL_ENV === "preview" && env.VERCEL_URL) {
+    const hosts = [env.VERCEL_URL, env.VERCEL_BRANCH_URL].filter((h): h is string => Boolean(h));
+    return { allowedHosts: hosts, fallback: `https://${env.VERCEL_URL}`, protocol: "https" as const };
+  }
+  // Production: Vercel's production address, unless BETTER_AUTH_URL names another (a custom domain).
+  if (env.VERCEL_ENV === "production" && !env.BETTER_AUTH_URL && env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  return undefined;
+}
+
+/**
  * Better Auth: email + password accounts stored in our SQLite database through Drizzle.
  * Reads BETTER_AUTH_SECRET and BETTER_AUTH_URL from the environment.
  */
 export const auth = betterAuth({
+  baseURL: vercelBaseURL(),
   database: drizzleAdapter(getDbSync(), {
     provider: "sqlite",
     schema: { user: schema.user, session: schema.session, account: schema.account, verification: schema.verification },

@@ -140,4 +140,4 @@ Each deploy runs `npm run vercel-build`: it applies pending migrations to that e
 - **M2** Agents, debate creation and the live debate page
 - **M3** Accounts and voting
 - **M4** Rolling summary, failure and resume, styling, deploy notes
-- **M5** Claude provider, pricing, leaderboard
+- **M5** Leaderboards (agents and users, done), then the Claude provider on users' own keys and pricing

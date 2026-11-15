@@ -49,8 +49,8 @@ async function manualDebate(rounds = 2) {
     { topic: "Should cities ban cars?", rounds, maxParticipants: 2, startMode: "manual" },
     clock.now(),
   );
-  await enter(db, { debateId, userId: "alice", agentId: await seedAgent(db, "alice", { name: "Ada" }), position: 1 });
-  await enter(db, { debateId, userId: "bob", agentId: await seedAgent(db, "bob", { name: "Bram" }), position: 2 });
+  await enter(db, { debateId, userId: "alice", agentId: await seedAgent(db, "alice"), position: 1 });
+  await enter(db, { debateId, userId: "bob", agentId: await seedAgent(db, "bob"), position: 2 });
   return debateId;
 }
 

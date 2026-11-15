@@ -8,7 +8,8 @@ import { getModelOptions } from "@/lib/ai/model-options";
 import { requireUser, safeNext } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { agents } from "@/lib/db/schema";
-import { deleteAgent, LifecycleError } from "@/lib/debate/lifecycle";
+import { isAgentNameTaken, nameTakenMessage } from "@/lib/agent-names";
+import { deleteAgent, isUniqueViolation, LifecycleError } from "@/lib/debate/lifecycle";
 import { agentSchema } from "@/lib/validation/agent";
 import { pickValues, type FormValues } from "@/lib/form-values";
 import { z } from "zod";
@@ -58,14 +59,23 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
   const unchanged = existing && existing.provider === v.provider && existing.modelId === v.modelId;
   if (!offered && !unchanged) return { errors: { model: ["Pick one of the available models."] }, values };
 
+  const nameTaken = { errors: { name: [nameTakenMessage(v.name)] }, values };
+  if (await isAgentNameTaken(db, me.id, v.name, existing?.id)) return nameTaken;
+
   const now = Date.now();
-  if (existing) {
-    await db
-      .update(agents)
-      .set({ ...v, updatedAt: now })
-      .where(eq(agents.id, existing.id));
-  } else {
-    await db.insert(agents).values({ id: randomUUID(), ownerId: me.id, ...v, createdAt: now, updatedAt: now });
+  try {
+    if (existing) {
+      await db
+        .update(agents)
+        .set({ ...v, updatedAt: now })
+        .where(eq(agents.id, existing.id));
+    } else {
+      await db.insert(agents).values({ id: randomUUID(), ownerId: me.id, ...v, createdAt: now, updatedAt: now });
+    }
+  } catch (err) {
+    // Two saves with the same name at once: the database's unique index stops the second.
+    if (isUniqueViolation(err)) return nameTaken;
+    throw err;
   }
   redirect("/agents");
 }

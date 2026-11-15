@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/lib/auth/auth";
+import { afterSignOut } from "@/lib/auth/protected-paths";
 import { safeNext } from "@/lib/auth/session";
 import { pickValues, type FormValues } from "@/lib/form-values";
 
@@ -73,7 +74,8 @@ export async function signInWithGitHubAction(formData: FormData) {
   redirect(result.url);
 }
 
-export async function signOutAction() {
+export async function signOutAction(formData: FormData) {
   await auth.api.signOut({ headers: await headers() });
-  redirect("/debates");
+  // Stay on the page you were on, unless it needs an account.
+  redirect(afterSignOut(safeNext(formData.get("next"))));
 }

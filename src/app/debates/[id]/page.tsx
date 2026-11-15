@@ -196,7 +196,11 @@ async function Lobby({
                   )}
                 </>
               ) : eligible.length > 0 ? (
-                <EnterSlotForm debateId={debate.id} position={position} agents={eligible.map((a) => ({ id: a.id, name: a.name }))} />
+                <EnterSlotForm
+                  debateId={debate.id}
+                  position={position}
+                  agents={eligible.map((a) => ({ id: a.id, name: a.name }))}
+                />
               ) : (
                 <p className="text-sm text-zinc-500">
                   Empty.{" "}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { StatusBadge } from "@/components/debates/status-badge";
+import { LocalDate } from "@/components/local-date";
 import { ButtonLink, Card, cx, PageHeader } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listDebates, type DebateFilter } from "@/lib/queries";
@@ -26,6 +27,12 @@ export default function DebatesPage(props: PageProps<"/debates">) {
       </Suspense>
     </>
   );
+}
+
+/** "Ada vs Bram" once started; while open, a plain list ("Ada, Bram") since more may join. */
+function joinNames(names: string[], open: boolean): string {
+  if (open) return names.join(", ");
+  return names.length === 2 ? `${names[0]} vs ${names[1]}` : names.join(" · ");
 }
 
 async function DebateList({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -68,11 +75,15 @@ async function DebateList({ searchParams }: { searchParams: Promise<Record<strin
             <li key={d.id}>
               <Link href={`/debates/${d.id}`}>
                 <Card className="flex items-center justify-between gap-4 transition-colors hover:border-indigo-300 dark:hover:border-indigo-800">
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium">{d.topic}</p>
+                    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                      {d.names.length > 0 ? joinNames(d.names, d.status === "open") : "No agents yet"}
+                    </p>
                     <p className="mt-1 text-xs text-zinc-500">
                       {d.entries.length}/{d.maxParticipants} agents · {d.rounds} rounds
-                      {d.status === "open" && d.startMode === "scheduled" && d.startAt ? " · scheduled" : ""}
+                      {d.status === "open" && d.startMode === "scheduled" && d.startAt ? " · scheduled" : ""} ·{" "}
+                      <LocalDate at={d.createdAt} />
                     </p>
                   </div>
                   <StatusBadge status={d.status} />

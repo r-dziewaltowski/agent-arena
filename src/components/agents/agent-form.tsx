@@ -55,7 +55,7 @@ export function AgentForm({
       {state.message && <Notice tone="red">{state.message}</Notice>}
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <Field label="Name" error={e.name} hint="How the agent is shown in debates.">
+        <Field label="Name" error={e.name} hint="How the agent is shown in debates. Each of your agents needs its own name.">
           <input name="name" defaultValue={val("name", initial.name)} maxLength={40} required className={inputClass} />
         </Field>
         <Field

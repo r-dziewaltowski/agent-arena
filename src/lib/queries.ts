@@ -52,7 +52,19 @@ export async function listDebates(filter: DebateFilter, userId: string) {
     : [];
   const byDebate = new Map<string, typeof entries>();
   for (const e of entries) byDebate.set(e.debateId, [...(byDebate.get(e.debateId) ?? []), e]);
-  const withEntries = rows.map((d) => ({ ...d, entries: byDebate.get(d.id) ?? [] }));
+  // Started debates show the snapshot name; open ones don't have it yet, so use the agent's name.
+  const openAgentIds = [...new Set(entries.filter((e) => !e.name && e.agentId).map((e) => e.agentId!))];
+  const agentNames = new Map(
+    (openAgentIds.length
+      ? await db.select({ id: agents.id, name: agents.name }).from(agents).where(inArray(agents.id, openAgentIds))
+      : []
+    ).map((a) => [a.id, a.name]),
+  );
+  const withEntries = rows.map((d) => {
+    const list = (byDebate.get(d.id) ?? []).sort((a, b) => a.position - b.position);
+    const names = list.map((e) => e.name ?? (e.agentId ? agentNames.get(e.agentId) : undefined) ?? "Unknown");
+    return { ...d, entries: list, names };
+  });
   if (filter !== "mine") return withEntries;
   return withEntries.filter((d) => d.creatorId === userId || d.entries.some((e) => e.userId === userId));
 }

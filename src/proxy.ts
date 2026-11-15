@@ -13,6 +13,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Public: the debate list and pages, public agent pages, sign-in/up.
+  // Public: the debate list and pages, public agent pages, sign-in/up. Keep in step with
+  // src/lib/auth/protected-paths.ts (this matcher must be a literal, so it can't import that).
   matcher: ["/agents", "/agents/new", "/agents/:id/edit", "/debates/new"],
 };

@@ -1,4 +1,5 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { user } from "./auth";
 
 export const agents = sqliteTable(
@@ -30,5 +31,10 @@ export const agents = sqliteTable(
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (t) => [index("agents_owner_idx").on(t.ownerId)],
+  (t) => [
+    index("agents_owner_idx").on(t.ownerId),
+    // A user's agents have distinct names, ignoring case. Different users may share a name; a
+    // debate tells same-named agents apart by suffixing later ones ("Ada (2)").
+    uniqueIndex("agents_owner_name_unique").on(t.ownerId, sql`lower(${t.name})`),
+  ],
 );

@@ -35,6 +35,14 @@ export function VotePanel({
   const open = !results.final;
   const nameOf = (id: string) => slots.find((s) => s.participantId === id)?.name ?? "Unknown";
 
+  // Whether this viewer can still vote: signed in, not voted yet, and at least one agent isn't theirs.
+  const canVote = open && viewerId !== null && myVote === null && slots.some((s) => s.userId !== viewerId);
+  let title: string;
+  if (!open) title = "Final result";
+  else if (myVote) title = "Thanks for voting";
+  else if (canVote) title = "Who won? Vote now";
+  else title = "Who won?";
+
   let headline: string;
   if (!showTally) headline = "Results are revealed " + (debate.tallyVisibility === "after_vote" ? "once you vote, or when voting closes." : "when voting closes.");
   else if (results.total === 0) headline = open ? "No votes yet." : "Voting closed with no votes.";
@@ -44,7 +52,7 @@ export function VotePanel({
   return (
     <Card className="mt-6 space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">{open ? "Who won? Vote now" : "Final result"}</h2>
+        <h2 className="text-lg font-semibold">{title}</h2>
         {open && debate.votingClosesAt && (
           <span className="text-xs text-zinc-500">
             <Countdown to={debate.votingClosesAt} label="Voting closes in" />

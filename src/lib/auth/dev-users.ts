@@ -18,6 +18,7 @@ let seeded = false;
 /** Inserts the dev users if they don't exist yet. Cheap after the first call. */
 export async function ensureDevUsers(db: Db): Promise<void> {
   if (seeded) return;
+  const now = new Date(Date.now());
   for (const u of DEV_USERS) {
     await db
       .insert(user)
@@ -27,6 +28,8 @@ export async function ensureDevUsers(db: Db): Promise<void> {
         email: `${u.name.toLowerCase()}@example.test`,
         displayName: u.name,
         isAdmin: u.isAdmin,
+        createdAt: now,
+        updatedAt: now,
       })
       .onConflictDoNothing();
   }

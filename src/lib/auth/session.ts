@@ -11,9 +11,11 @@ export type CurrentUser = { id: string; displayName: string; isAdmin: boolean };
  * M3 replaces this with Better Auth sessions, keeping the same shape.
  */
 export async function getCurrentUser(): Promise<CurrentUser> {
+  // Read the cookie first: it marks the caller as per-request, so Next never prerenders it
+  // (and never touches the database while prerendering).
+  const store = await cookies();
   const db = await getDb();
   await ensureDevUsers(db);
-  const store = await cookies();
   const wanted = store.get(DEV_USER_COOKIE)?.value;
   const id = DEV_USERS.some((u) => u.id === wanted) ? wanted! : DEV_USERS[0].id;
   const [row] = await db

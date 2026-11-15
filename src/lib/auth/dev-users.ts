@@ -15,7 +15,10 @@ export const DEV_USER_COOKIE = "dev_user";
 
 let seeded = false;
 
-/** Inserts the dev users if they don't exist yet. Cheap after the first call. */
+/**
+ * Creates the dev users, or brings existing rows in line (the terminal debate script also
+ * creates some of them, without admin rights). Cheap after the first call.
+ */
 export async function ensureDevUsers(db: Db): Promise<void> {
   if (seeded) return;
   const now = new Date(Date.now());
@@ -31,7 +34,10 @@ export async function ensureDevUsers(db: Db): Promise<void> {
         createdAt: now,
         updatedAt: now,
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: user.id,
+        set: { displayName: u.name, isAdmin: u.isAdmin, updatedAt: now },
+      });
   }
   seeded = true;
 }

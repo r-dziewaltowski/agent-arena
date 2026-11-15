@@ -32,8 +32,9 @@ if (!["ollama", "groq"].includes(provider)) {
 const model = arg("model", defaultModelFor(provider));
 
 const DEV_USERS = [
-  { id: "dev-user-alice", name: "Alice", email: "alice@example.test" },
-  { id: "dev-user-bob", name: "Bob", email: "bob@example.test" },
+  // Same ids as the web app's dev users (src/lib/auth/dev-users.ts); Alice is the admin there too.
+  { id: "dev-user-alice", name: "Alice", email: "alice@example.test", isAdmin: true },
+  { id: "dev-user-bob", name: "Bob", email: "bob@example.test", isAdmin: false },
 ];
 
 const DEV_AGENTS = [

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth/auth";
 import { afterSignOut } from "@/lib/auth/protected-paths";
 import { safeNext } from "@/lib/auth/session";
+import { enabledSocialProviders, isSocialProvider, SOCIAL_LABELS } from "@/lib/auth/social";
 import { pickValues, type FormValues } from "@/lib/form-values";
 
 export type AuthFormState = {
@@ -101,20 +102,23 @@ export async function resetPasswordAction(_prev: AuthFormState, formData: FormDa
   redirect("/sign-in?reset=1");
 }
 
-/** Starts GitHub sign-in: Better Auth returns GitHub's authorization page to send the browser to. */
-export async function signInWithGitHubAction(formData: FormData) {
+/** Starts sign-in with Google or GitHub: Better Auth returns their page to send the browser to. */
+export async function signInWithSocialAction(formData: FormData) {
+  const provider = formData.get("provider");
+  if (!isSocialProvider(provider) || !enabledSocialProviders().includes(provider)) throw new Error("That sign-in isn't available.");
   const next = safeNext(formData.get("next"));
   const result = await auth.api.signInSocial({
     body: {
-      provider: "github",
+      provider,
       callbackURL: next,
       // Failures (e.g. the email already belongs to a password account) come back to the
-      // sign-in page with ?error=…, which it explains, instead of Better Auth's bare error page.
-      errorCallbackURL: `/sign-in?next=${encodeURIComponent(next)}`,
+      // sign-in page with ?error=…, which it explains naming the service, instead of Better
+      // Auth's bare error page.
+      errorCallbackURL: `/sign-in?next=${encodeURIComponent(next)}&via=${provider}`,
     },
     headers: await headers(),
   });
-  if (!result.url) throw new Error("GitHub sign-in is not available.");
+  if (!result.url) throw new Error(`${SOCIAL_LABELS[provider]} sign-in is not available.`);
   redirect(result.url);
 }
 

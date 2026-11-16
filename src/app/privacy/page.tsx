@@ -19,7 +19,7 @@ export default function PrivacyPage() {
               resetting your password). We send nothing else.
             </li>
             <li>
-              <strong>Your display name</strong>, and your profile picture&apos;s address if you sign in with GitHub.
+              <strong>Your display name</strong>, and your profile picture&apos;s address if you sign in with Google or GitHub.
             </li>
             <li>
               <strong>Your password</strong>, stored only as a one-way hash, so nobody can read it back.
@@ -67,7 +67,10 @@ export default function PrivacyPage() {
               models there may use what they receive to improve their services.
             </li>
             <li><strong>Google (Gmail)</strong> delivers account emails.</li>
-            <li><strong>GitHub</strong>, only if you choose to sign in with it.</li>
+            <li>
+              <strong>Google</strong> and <strong>GitHub</strong>, only if you choose to sign in with them: they tell
+              this site your name, email address and profile picture.
+            </li>
           </ul>
         </Section>
 

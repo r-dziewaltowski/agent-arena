@@ -32,9 +32,11 @@ export const e2eEnv: Record<string, string> = {
   QSTASH_TOKEN: "eyJVc2VySUQiOiJkZWZhdWx0VXNlciIsIlBhc3N3b3JkIjoiZGVmYXVsdFBhc3N3b3JkIn0=",
   QSTASH_CURRENT_SIGNING_KEY: "sig_7kYjw48mhY7kAjqNGcy6cr29RJ6r",
   QSTASH_NEXT_SIGNING_KEY: "sig_5ZB6DVzB1wjE8S6rZ7eenA8Pdnhs",
-  // GitHub sign-in stays off in the tests, even if .env.local sets it up.
+  // Google and GitHub sign-in stay off in the tests, even if .env.local sets them up.
   GITHUB_CLIENT_ID: "",
   GITHUB_CLIENT_SECRET: "",
+  GOOGLE_CLIENT_ID: "",
+  GOOGLE_CLIENT_SECRET: "",
   // No real email: everything goes to the outbox file, where the tests read the links.
   GMAIL_USER: "",
   GMAIL_APP_PASSWORD: "",

@@ -6,11 +6,12 @@ import {
   forgotPasswordAction,
   resetPasswordAction,
   signInAction,
-  signInWithGitHubAction,
+  signInWithSocialAction,
   signUpAction,
   type AuthFormState,
 } from "@/actions/auth";
 import { Button, Field, inputClass, Notice } from "@/components/ui";
+import { SOCIAL_LABELS, type SocialProvider } from "@/lib/auth/social";
 
 const linkClass = "font-medium text-indigo-600 hover:underline dark:text-indigo-400";
 
@@ -77,20 +78,26 @@ export function SignUpForm({ next }: { next: string }) {
   );
 }
 
-/** "Continue with GitHub", shown only when GitHub sign-in is configured. */
-export function GitHubButton({ next }: { next: string }) {
+/** "Continue with Google" / "Continue with GitHub", one per configured provider. */
+export function SocialButtons({ providers, next }: { providers: SocialProvider[]; next: string }) {
+  if (providers.length === 0) return null;
   return (
-    <form action={signInWithGitHubAction} className="space-y-4">
-      <input type="hidden" name="next" value={next} />
-      <Button type="submit" variant="secondary" className="w-full">
-        Continue with GitHub
-      </Button>
-      <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+    <div className="mb-4 space-y-3">
+      {providers.map((provider) => (
+        <form key={provider} action={signInWithSocialAction}>
+          <input type="hidden" name="provider" value={provider} />
+          <input type="hidden" name="next" value={next} />
+          <Button type="submit" variant="secondary" className="w-full">
+            Continue with {SOCIAL_LABELS[provider]}
+          </Button>
+        </form>
+      ))}
+      <div className="flex items-center gap-3 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
         <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
         or with email
         <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
       </div>
-    </form>
+    </div>
   );
 }
 

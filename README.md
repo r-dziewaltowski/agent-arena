@@ -73,7 +73,9 @@ GOOGLE_GENERATIVE_AI_API_KEY=
 BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:3000
 
-# Optional: "Continue with GitHub" (shown only when both are set)
+# Optional: "Continue with Google" and "Continue with GitHub" (each shown only when both values are set)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 
@@ -107,6 +109,8 @@ Generate the secret with `node -e "console.log(require('crypto').randomBytes(32)
 
 **GitHub sign-in:** create an OAuth app at GitHub → Settings → Developer settings → OAuth Apps, with the homepage `http://localhost:3000` and the callback URL `http://localhost:3000/api/auth/callback/github` (one app per environment; use the deployed URL for production). Put its client ID and a generated client secret in `.env.local`. New GitHub users get their GitHub name (or username) as display name.
 
+**Google sign-in:** in the Google Cloud console create a project, set up the OAuth consent screen (app name, the app's support email, audience *External*, then publish it: basic sign-in with email and profile needs no Google verification), and create an OAuth client of type *Web application* with the redirect URIs `http://localhost:3000/api/auth/callback/google` and `https://<production address>/api/auth/callback/google` (one client serves both). Put its client ID and secret in `.env.local` and in Vercel as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. New Google users get their Google name as display name, and their email counts as confirmed.
+
 **Turso instead of a local file:** create a database (`turso db create agent-arena`), then set `DATABASE_URL=libsql://…` and `DATABASE_AUTH_TOKEN=…` (from `turso db show --url` and `turso db tokens create`) and run `npm run db:migrate`. No code changes are needed; the local-file settings (WAL and so on) are simply skipped for remote databases.
 
 Paid models (Claude and others) arrive in M5 and run only on users' own API keys, so there is no app-wide paid key.
@@ -132,11 +136,12 @@ Production runs on Vercel's Hobby plan, with the database on Turso and the queue
 3. **Vercel:** sign in with GitHub, import this repository, and before the first deploy add the environment variables for **Production**: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `GROQ_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` (optional), a new `BETTER_AUTH_SECRET` (not the local one), and the four `QSTASH_*` values. Then deploy.
 4. **Email:** create a Gmail account just for the app (e.g. agentarena.mail@gmail.com), turn on 2-Step Verification for it, then create an app password at https://myaccount.google.com/apppasswords. Add `GMAIL_USER` (the address) and `GMAIL_APP_PASSWORD` (the 16 letters, without spaces) to Vercel for **Production**. Production deploys fail without them, since nobody could confirm their email. Gmail allows about 500 emails a day; with a domain later, a provider such as Resend can replace it in `src/lib/email/send.ts`.
 5. **Paid models:** add a new `USER_API_KEYS_ENCRYPTION_SECRET` (generated as above, not the local one) for **Production**. Production deploys fail without it. Nothing else is needed: each user connects their own OpenRouter account from their Account page, and their agents' paid turns are billed to them.
-6. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
+6. **Google sign-in (optional):** add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to Vercel (the same client as locally, with the production redirect URI added) and redeploy.
+7. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
 
 Each deploy runs `npm run vercel-build`: it applies pending migrations to that environment's database, creates or updates the sweep schedule (production only), then builds. The production address comes from Vercel (`VERCEL_PROJECT_PRODUCTION_URL`); set `BETTER_AUTH_URL` and `APP_URL` only for a custom domain. Pushing to `main` deploys production; other branches get preview deployments.
 
-**Preview deployments (optional):** give the **Preview** environment its own Turso database (`agent-arena-preview`) and its own `BETTER_AUTH_SECRET`, plus the same Groq and QStash values, and turn on *Protection Bypass for Automation* in the project's Deployment Protection settings so QStash can reach protected previews. Previews work out their own addresses; GitHub sign-in stays production-only.
+**Preview deployments (optional):** give the **Preview** environment its own Turso database (`agent-arena-preview`) and its own `BETTER_AUTH_SECRET`, plus the same Groq and QStash values, and turn on *Protection Bypass for Automation* in the project's Deployment Protection settings so QStash can reach protected previews. Previews work out their own addresses; Google and GitHub sign-in stay production-only (their redirect addresses are fixed).
 
 ## Useful commands
 

@@ -1,8 +1,8 @@
 import { Suspense } from "react";
-import { GitHubButton, SignInForm } from "@/components/auth/auth-forms";
-import { githubEnabled } from "@/lib/auth/auth";
+import { SignInForm, SocialButtons } from "@/components/auth/auth-forms";
 import { Card, Notice } from "@/components/ui";
 import { safeNext } from "@/lib/auth/session";
+import { enabledSocialProviders, isSocialProvider, socialErrorMessage } from "@/lib/auth/social";
 
 export default function SignInPage(props: PageProps<"/sign-in">) {
   return (
@@ -17,26 +17,22 @@ export default function SignInPage(props: PageProps<"/sign-in">) {
   );
 }
 
-/** Why GitHub sign-in came back without signing in (Better Auth's error codes). */
-function gitHubErrorMessage(error: string | string[] | undefined): string | null {
-  if (!error) return null;
-  if (error === "account_not_linked") {
-    return "An account with your GitHub email already exists. Sign in with your email and password instead.";
-  }
-  if (error === "access_denied") return "GitHub sign-in was cancelled.";
+/** Why the user came back here without being signed in (Better Auth's error codes). */
+function errorMessage(error: string | string[] | undefined, via: string | string[] | undefined): string | null {
+  if (typeof error !== "string" || !error) return null;
   if (error === "INVALID_TOKEN" || error === "TOKEN_EXPIRED") return "That link has expired or was already used. Sign in to get a new confirmation email.";
-  return "GitHub sign-in didn't complete. Please try again.";
+  return socialErrorMessage(error, isSocialProvider(via) ? via : null);
 }
 
 async function Form({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { next, error, reset, deleted } = await searchParams;
+  const { next, error, via, reset, deleted } = await searchParams;
   const target = safeNext(next);
-  const gitHubError = gitHubErrorMessage(error);
+  const signInError = errorMessage(error, via);
   return (
     <>
-      {gitHubError && (
+      {signInError && (
         <div className="mb-4">
-          <Notice tone="amber">{gitHubError}</Notice>
+          <Notice tone="amber">{signInError}</Notice>
         </div>
       )}
       {reset && (
@@ -49,10 +45,8 @@ async function Form({ searchParams }: { searchParams: Promise<Record<string, str
           <Notice tone="blue">Your account was deleted. Thanks for trying Agent Arena.</Notice>
         </div>
       )}
-      {githubEnabled() && <GitHubButton next={target} />}
-      <div className={githubEnabled() ? "mt-4" : undefined}>
-        <SignInForm next={target} />
-      </div>
+      <SocialButtons providers={enabledSocialProviders()} next={target} />
+      <SignInForm next={target} />
     </>
   );
 }

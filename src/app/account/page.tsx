@@ -11,6 +11,7 @@ import { PaidModelsSection } from "@/components/paid-models-section";
 import { getDb } from "@/lib/db/client";
 import { getConnection } from "@/lib/openrouter";
 import { encryptionConfigured } from "@/lib/secrets";
+import { isSocialProvider, SOCIAL_LABELS } from "@/lib/auth/social";
 
 export default function AccountPage(props: PageProps<"/account">) {
   return (
@@ -27,9 +28,10 @@ async function Sections({ searchParams }: { searchParams: Promise<Record<string,
   const me = await requireUser("/account");
   const { openrouter } = await searchParams;
   const connection = await getConnection(await getDb(), me.id);
-  // Accounts created with GitHub have no password to change.
+  // Accounts created with Google or GitHub have no password to change.
   const logins = await auth.api.listUserAccounts({ headers: await headers() });
   const hasPassword = logins.some((l) => l.providerId === "credential");
+  const via = logins.map((l) => l.providerId).filter(isSocialProvider).map((p) => SOCIAL_LABELS[p]);
 
   return (
     <div className="max-w-xl space-y-6">
@@ -43,7 +45,7 @@ async function Sections({ searchParams }: { searchParams: Promise<Record<string,
         {hasPassword ? (
           <ChangePasswordForm />
         ) : (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">You sign in with GitHub, so there&apos;s no password to change here.</p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">You sign in with {via.join(" and ") || "another service"}, so there&apos;s no password to change here.</p>
         )}
       </Card>
 

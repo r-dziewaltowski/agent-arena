@@ -5,6 +5,7 @@ import { getDbSync } from "../db/client";
 import * as schema from "../db/schema";
 import { sendEmail } from "../email/send";
 import { alreadyRegistered, confirmEmail, resetPassword } from "../email/templates";
+import { enabledSocialProviders, socialCredentials } from "./social";
 
 /**
  * A Vercel preview has its own addresses (one per deployment, one per branch), so instead of a
@@ -58,17 +59,29 @@ export const auth = betterAuth({
       await sendEmail(confirmEmail(user.email, nameOf(user), url));
     },
   },
-  // GitHub sign-in, switched on only when its OAuth app credentials are set.
-  socialProviders: githubEnabled()
-    ? {
-        github: {
-          clientId: process.env.GITHUB_CLIENT_ID!,
-          clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-          // Our required displayName comes from the GitHub profile name, or the username.
-          mapProfileToUser: (profile) => ({ displayName: profile.name || profile.login }),
-        },
-      }
-    : {},
+  // Sign-in with Google and GitHub, each switched on only when its OAuth client credentials are set.
+  // Our required displayName comes from the profile's name (or GitHub username / email name).
+  socialProviders: {
+    ...(enabledSocialProviders().includes("google")
+      ? {
+          google: {
+            ...socialCredentials("google"),
+            prompt: "select_account" as const, // people with several Google accounts pick one
+            mapProfileToUser: (profile: { name?: string; email: string }) => ({
+              displayName: profile.name || profile.email.split("@")[0],
+            }),
+          },
+        }
+      : {}),
+    ...(enabledSocialProviders().includes("github")
+      ? {
+          github: {
+            ...socialCredentials("github"),
+            mapProfileToUser: (profile: { name?: string | null; login: string }) => ({ displayName: profile.name || profile.login }),
+          },
+        }
+      : {}),
+  },
   user: {
     additionalFields: {
       displayName: { type: "string", required: true },
@@ -94,6 +107,4 @@ function siteOrigin(request?: Request): string {
   return (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
-export function githubEnabled(): boolean {
-  return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
-}
+

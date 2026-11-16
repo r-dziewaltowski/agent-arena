@@ -51,6 +51,14 @@ export const TONE_DESCRIPTIONS: Record<keyof typeof TONE_PRESETS, string> = {
   warm: "Warm and generous towards the others.",
 };
 
+export const STANCE_DESCRIPTIONS: Record<"contrarian" | "agreeable" | "neutral" | "mediator" | "provocateur", string> = {
+  contrarian: "Disagrees, and tests the others' claims.",
+  agreeable: "Looks for agreement and builds on good ideas.",
+  neutral: "Weighs every side before taking a position.",
+  mediator: "Tries to bring opposing sides together.",
+  provocateur: "Takes bold, controversial positions and pushes back hard.",
+};
+
 export const STANCE_PRESETS = {
   contrarian: {
     description: "You like to disagree and to test other people's claims.",

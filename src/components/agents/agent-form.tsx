@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import { saveAgent, type AgentFormState } from "@/actions/agents";
 import { Button, Field, inputClass, Notice, cx } from "@/components/ui";
 import type { ModelGroup } from "@/lib/ai/model-options";
@@ -9,7 +9,7 @@ import {
   CREATIVITY_LEVELS,
   CUSTOM_TRAIT,
   CUSTOM_TRAIT_MAX_LENGTH,
-  STANCE_PRESETS,
+  STANCE_DESCRIPTIONS,
   STANCES,
   STYLE_DESCRIPTIONS,
   TONE_DESCRIPTIONS,
@@ -49,6 +49,9 @@ export function AgentForm({
   // After a rejected save, show what was submitted rather than the original values.
   const sent = state.values ?? {};
   const val = (key: keyof AgentFormValues | "model", fallback: string) => sent[key] ?? fallback;
+  const modelDescriptions = new Map<string, string>(
+    modelGroups.flatMap((g) => g.models.map((m) => [`${m.provider}::${m.id}`, m.description] as [string, string])),
+  );
 
   return (
     // Remounted after a rejected save so every field (dropdowns included) starts from what was sent.
@@ -60,26 +63,32 @@ export function AgentForm({
         <Field label="Name" error={e.name} hint="How the agent is shown in debates. Each of your agents needs its own name.">
           <input name="name" defaultValue={val("name", initial.name)} maxLength={40} required className={inputClass} />
         </Field>
-        <Field
+        <SelectWithHint
+          name="model"
           label="Model"
           error={e.model ?? e.provider ?? e.modelId}
-          hint={modelGroups.length === 0 ? "No models available: set GROQ_API_KEY or start Ollama." : undefined}
+          defaultValue={val("model", currentValue)}
+          required
+          hintFor={(v) =>
+            modelGroups.length === 0
+              ? "No models available: set GROQ_API_KEY or start Ollama."
+              : (modelDescriptions.get(v) ??
+                "No longer offered. Pick a current model; until then, debates use the provider's default.")
+          }
         >
-          <select name="model" defaultValue={val("model", currentValue)} required className={inputClass}>
-            {!currentOffered && initial.modelId && (
-              <option value={currentValue}>{currentModelLabel ?? initial.modelId} (no longer offered)</option>
-            )}
-            {modelGroups.map((g) => (
-              <optgroup key={g.provider} label={g.label}>
-                {g.models.map((m) => (
-                  <option key={m.id} value={`${m.provider}::${m.id}`}>
-                    {m.name}: {m.description}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </Field>
+          {!currentOffered && initial.modelId && (
+            <option value={currentValue}>{currentModelLabel ?? initial.modelId} (no longer offered)</option>
+          )}
+          {modelGroups.map((g) => (
+            <optgroup key={g.provider} label={g.label}>
+              {g.models.map((m) => (
+                <option key={m.id} value={`${m.provider}::${m.id}`}>
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </SelectWithHint>
       </div>
 
       <Field
@@ -119,15 +128,19 @@ export function AgentForm({
           sent={sent}
           error={e.tone}
         />
-        <Field label="Stance" error={e.stance} hint="How it treats the other speakers.">
-          <select name="stance" defaultValue={val("stance", initial.stance)} className={inputClass}>
-            {STANCES.map((s) => (
-              <option key={s} value={s} title={STANCE_PRESETS[s].description}>
-                {traitLabel(s)}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <SelectWithHint
+          name="stance"
+          label="Stance"
+          error={e.stance}
+          defaultValue={val("stance", initial.stance)}
+          hintFor={(v) => STANCE_DESCRIPTIONS[v as keyof typeof STANCE_DESCRIPTIONS] ?? "How it treats the other speakers."}
+        >
+          {STANCES.map((s) => (
+            <option key={s} value={s}>
+              {traitLabel(s)}
+            </option>
+          ))}
+        </SelectWithHint>
       </div>
 
       <Segmented
@@ -159,6 +172,43 @@ export function AgentForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * A dropdown whose hint describes the chosen option. Browsers don't show tooltips on options, so
+ * descriptions live under the field and follow the selection.
+ */
+function SelectWithHint({
+  name,
+  label,
+  error,
+  defaultValue,
+  required,
+  hintFor,
+  children,
+}: {
+  name: string;
+  label: string;
+  error?: string[];
+  defaultValue: string;
+  required?: boolean;
+  hintFor: (value: string) => string;
+  children: ReactNode;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  return (
+    <Field label={label} error={error} hint={hintFor(value)}>
+      <select
+        name={name}
+        defaultValue={defaultValue}
+        required={required}
+        onChange={(event) => setValue(event.target.value)}
+        className={inputClass}
+      >
+        {children}
+      </select>
+    </Field>
   );
 }
 
@@ -243,7 +293,7 @@ function Segmented({
         {options.map((o) => (
           <label
             key={o.value}
-            className="cursor-pointer rounded-md border border-zinc-300 px-3 py-2 text-sm has-checked:border-indigo-500 has-checked:bg-indigo-50 has-checked:ring-1 has-checked:ring-indigo-500 dark:border-zinc-700 dark:has-checked:bg-indigo-950"
+            className="cursor-pointer rounded-md border border-zinc-300 px-3 py-2 text-sm has-checked:border-indigo-500 has-checked:bg-indigo-50 has-checked:ring-1 has-checked:ring-indigo-500 dark:border-zinc-700 dark:has-checked:bg-indigo-950 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-indigo-500"
           >
             <input type="radio" name={name} value={o.value} defaultChecked={o.value === defaultValue} className="sr-only" />
             <span className="block font-medium">{o.label}</span>

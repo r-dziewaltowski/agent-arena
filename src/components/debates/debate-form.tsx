@@ -60,6 +60,7 @@ function DebateFields({ values }: { values: FormValues }) {
   const timeZone = useTimeZone();
   const [startMode, setStartMode] = useState(values.startMode ?? "manual");
   const [defaultStart, setDefaultStart] = useState(values.startAtLocal ?? "");
+  const [tally, setTally] = useState(values.tallyVisibility ?? "after_vote");
 
   return (
     <>
@@ -159,10 +160,16 @@ function DebateFields({ values }: { values: FormValues }) {
             ))}
           </select>
         </Field>
-        <Field label="Show vote counts" hint={TALLY[0][2]}>
-          <select name="tallyVisibility" defaultValue={values.tallyVisibility ?? "after_vote"} className={inputClass}>
-            {TALLY.map(([v, label, hint]) => (
-              <option key={v} value={v} title={hint}>
+        {/* The hint explains the chosen option (option tooltips aren't shown by browsers). */}
+        <Field label="Show vote counts" hint={TALLY.find(([v]) => v === tally)?.[2]}>
+          <select
+            name="tallyVisibility"
+            defaultValue={tally}
+            onChange={(event) => setTally(event.target.value)}
+            className={inputClass}
+          >
+            {TALLY.map(([v, label]) => (
+              <option key={v} value={v}>
                 {label}
               </option>
             ))}

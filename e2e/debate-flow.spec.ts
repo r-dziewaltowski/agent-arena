@@ -102,6 +102,39 @@ test("a rejected debate form keeps its input", async ({ browser }) => {
   await expect(a.locator(field("startAtLocal"))).toHaveValue("2020-01-01T09:00");
 });
 
+test("dropdown hints describe the chosen option", async ({ browser }) => {
+  const a = await newUserPage(browser, alice, "sign-in");
+  await a.goto("/debates/new");
+  await expect(a.getByText("Each user sees the counts once they've voted", { exact: false })).toBeVisible();
+  await a.locator(field("tallyVisibility")).selectOption("live");
+  await expect(a.getByText("Everyone sees the counts while voting is open")).toBeVisible();
+
+  await a.goto("/agents/new");
+  await expect(a.getByText("Strongest free model. Fast, sharp rebuttals.")).toBeVisible();
+  await a.locator(field("stance")).selectOption("mediator");
+  await expect(a.getByText("Tries to bring opposing sides together.")).toBeVisible();
+});
+
+test("deleting asks first, in the app's own dialog", async ({ browser }) => {
+  const a = await newUserPage(browser, alice, "sign-in");
+  await a.goto("/debates/new");
+  await a.locator(field("topic")).fill("A debate that will be deleted");
+  await a.getByRole("button", { name: "Create debate" }).click();
+  await expect(a).toHaveURL(/\/debates\/[0-9a-f-]{36}$/);
+
+  await a.getByRole("button", { name: "Delete debate" }).click();
+  const dialog = a.getByRole("dialog");
+  await expect(dialog.getByText("Delete this debate? Entered agents are withdrawn.")).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(a.getByText("A debate that will be deleted")).toBeVisible();
+
+  await a.getByRole("button", { name: "Delete debate" }).click();
+  await a.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await expect(a).toHaveURL(/\/debates$/);
+  await expect(a.getByText("A debate that will be deleted").filter({ visible: true })).toHaveCount(0);
+});
+
 test("a debate fills, runs through the queue and opens voting", async ({ browser }) => {
   const a = await newUserPage(browser, alice, "sign-in");
   await a.goto("/debates/new");

@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/debates/status-badge";
 
 export default function AgentPage(props: PageProps<"/agents/[id]">) {
   return (
-    <Suspense fallback={<p className="text-sm text-zinc-500">Loading…</p>}>
+    <Suspense fallback={<p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>}>
       <AgentView params={props.params} />
     </Suspense>
   );
@@ -49,7 +49,7 @@ async function AgentView({ params }: { params: Promise<{ id: string }> }) {
         <Card>
           <h2 className="mb-3 text-sm font-semibold">Debates</h2>
           {debates.length === 0 ? (
-            <p className="text-sm text-zinc-500">Not in any debates yet.</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Not in any debates yet.</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {debates.map((d) => (

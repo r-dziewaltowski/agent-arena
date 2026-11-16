@@ -106,7 +106,7 @@ export function Field({
     <label className="block">
       <span className="text-sm font-medium">{label}</span>
       <div className="mt-1">{children}</div>
-      {hint && !message && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
+      {hint && !message && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>}
       {message && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{message}</p>}
     </label>
   );

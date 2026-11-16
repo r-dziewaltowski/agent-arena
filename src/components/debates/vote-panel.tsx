@@ -54,14 +54,14 @@ export function VotePanel({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-semibold">{title}</h2>
         {open && debate.votingClosesAt && (
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
             <Countdown to={debate.votingClosesAt} label="Voting closes in" />
           </span>
         )}
       </div>
       <p className={cx("text-sm", results.winner && showTally ? "font-medium" : "text-zinc-600 dark:text-zinc-400")}>
         {headline}
-        {showTally && open && results.total > 0 && <span className="text-zinc-500"> (provisional)</span>}
+        {showTally && open && results.total > 0 && <span className="text-zinc-500 dark:text-zinc-400"> (provisional)</span>}
       </p>
 
       <ul className="space-y-2">
@@ -77,7 +77,7 @@ export function VotePanel({
                     {s.name}
                     {myVote === s.participantId && <span className="ml-2 text-xs text-indigo-600 dark:text-indigo-400">your vote</span>}
                   </p>
-                  <p className="text-xs text-zinc-500">by {s.ownerName}</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">by {s.ownerName}</p>
                 </div>
                 {showTally && (
                   <span className="text-sm tabular-nums text-zinc-600 dark:text-zinc-300">
@@ -85,7 +85,7 @@ export function VotePanel({
                   </span>
                 )}
                 {open && viewerId && myVote === null && !own && <VoteButton debateId={debate.id} participantId={s.participantId} />}
-                {open && own && <span className="text-xs text-zinc-500">Your agent</span>}
+                {open && own && <span className="text-xs text-zinc-500 dark:text-zinc-400">Your agent</span>}
               </div>
               {showTally && (
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">

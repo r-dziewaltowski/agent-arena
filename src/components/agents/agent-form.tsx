@@ -164,7 +164,7 @@ export function AgentForm({
         ]}
         defaultValue={val("visibility", initial.visibility)}
       />
-      <p className="-mt-3 text-xs text-zinc-500">Either way, only you can enter this agent into debates.</p>
+      <p className="-mt-3 text-xs text-zinc-500 dark:text-zinc-400">Either way, only you can enter this agent into debates.</p>
 
       <div className="flex gap-3">
         <Button type="submit" disabled={pending || modelGroups.length === 0}>
@@ -297,7 +297,7 @@ function Segmented({
           >
             <input type="radio" name={name} value={o.value} defaultChecked={o.value === defaultValue} className="sr-only" />
             <span className="block font-medium">{o.label}</span>
-            <span className="block text-xs text-zinc-500">{o.hint}</span>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-400">{o.hint}</span>
           </label>
         ))}
       </div>

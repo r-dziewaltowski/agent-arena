@@ -27,7 +27,7 @@ export function Countdown({ to, label = "Starts in" }: { to: number; label?: str
   return (
     <span>
       {left > 0 ? `${label} ${format(left)}` : "Starting…"}
-      <span className="text-zinc-500"> ({new Date(to).toLocaleString()})</span>
+      <span className="text-zinc-500 dark:text-zinc-400"> ({new Date(to).toLocaleString()})</span>
     </span>
   );
 }

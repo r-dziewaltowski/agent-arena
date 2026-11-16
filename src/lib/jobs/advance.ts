@@ -2,7 +2,7 @@
  * What one queue message does for one debate: start it if it's a scheduled debate that is due,
  * generate one turn if it's running, and queue the next message. Called by `/api/jobs/advance`.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { catalogAvailability, listOllamaModels, type ModelAvailability } from "../ai/models";
 import type { Db } from "../db/client";
 import { debates } from "../db/schema";
@@ -24,6 +24,30 @@ export type AdvanceResult =
   | { kind: "step"; outcome: StepOutcome; requeuedFor: number | "now" | null };
 
 export const defaultAvailability = async () => catalogAvailability(await listOllamaModels());
+
+/** Shown on a debate whose next step couldn't be queued (queue down or its daily limit reached). */
+export const QUEUE_DELAYED = "Delayed: the service that runs debates is busy right now. It will continue automatically.";
+
+/**
+ * Records that a running debate's next step couldn't be queued, so viewers see a waiting notice
+ * instead of a debate that silently stops. The next successful turn clears it.
+ */
+export async function markQueueDelayed(db: Db, debateId: string): Promise<void> {
+  await db
+    .update(debates)
+    .set({ waitingReason: QUEUE_DELAYED })
+    .where(and(eq(debates.id, debateId), eq(debates.status, "running")));
+}
+
+/** Queues a step; if the queue refuses, marks the debate as delayed and rethrows. */
+async function enqueueOrMark(db: Db, queue: JobQueue, debateId: string, opts: { at?: number; now: number }) {
+  try {
+    await queue.enqueueAdvance(debateId, opts);
+  } catch (err) {
+    await markQueueDelayed(db, debateId);
+    throw err;
+  }
+}
 
 async function loadDebate(db: Db, debateId: string) {
   const [debate] = await db.select().from(debates).where(eq(debates.id, debateId));
@@ -62,10 +86,10 @@ async function chain(db: Db, debateId: string, outcome: StepOutcome, deps: JobDe
   switch (outcome.kind) {
     case "turn":
       if (outcome.debateCompleted) return null;
-      await deps.queue.enqueueAdvance(debateId, { now: now() });
+      await enqueueOrMark(db, deps.queue, debateId, { now: now() });
       return "now";
     case "waiting":
-      await deps.queue.enqueueAdvance(debateId, { at: outcome.nextAttemptAt, now: now() });
+      await enqueueOrMark(db, deps.queue, debateId, { at: outcome.nextAttemptAt, now: now() });
       return outcome.nextAttemptAt;
     case "failed":
       return null;
@@ -78,7 +102,7 @@ async function chain(db: Db, debateId: string, outcome: StepOutcome, deps: JobDe
       if (!debate || debate.status !== "running") return null;
       if (outcome.kind === "skipped" && (debate.lockToken !== null || debate.nextAttemptAt === null)) return null;
       const at = debate.nextAttemptAt ?? now();
-      await deps.queue.enqueueAdvance(debateId, { at, now: now() });
+      await enqueueOrMark(db, deps.queue, debateId, { at, now: now() });
       return at > now() ? at : "now";
     }
   }
@@ -101,7 +125,7 @@ export async function queueDebate(
   const debate = await loadDebate(db, debateId);
   if (!debate) return;
   if (debate.status === "running") {
-    await queue.enqueueAdvance(debateId, { now });
+    await enqueueOrMark(db, queue, debateId, { now });
   } else if (
     !opts.runningOnly &&
     debate.status === "open" &&

@@ -9,12 +9,12 @@ import type { Db } from "../db/client";
 import { debates, turns } from "../db/schema";
 import { LOCK_TTL_MS } from "../debate/engine";
 import { startDueScheduled } from "../debate/lifecycle";
-import { defaultAvailability, type JobDeps } from "./advance";
+import { defaultAvailability, markQueueDelayed, type JobDeps } from "./advance";
 
 /** A running debate with no activity for this long past its due time is considered stalled. */
 export const STALL_MS = 2 * 60_000;
 
-export type SweepResult = { started: string[]; cancelled: string[]; restarted: string[] };
+export type SweepResult = { started: string[]; cancelled: string[]; restarted: string[]; delayed: string[] };
 
 export async function sweep(db: Db, deps: Pick<JobDeps, "queue" | "now" | "getAvailability">): Promise<SweepResult> {
   const now = deps.now ?? Date.now;
@@ -28,7 +28,15 @@ export async function sweep(db: Db, deps: Pick<JobDeps, "queue" | "now" | "getAv
   const due = dueScheduled
     ? await startDueScheduled(db, now(), await (deps.getAvailability ?? defaultAvailability)())
     : { started: [], cancelled: [] };
-  for (const id of due.started) await deps.queue.enqueueAdvance(id, { now: now() });
+  const delayed: string[] = [];
+  for (const id of due.started) {
+    try {
+      await deps.queue.enqueueAdvance(id, { now: now() });
+    } catch {
+      await markQueueDelayed(db, id); // the next sweep restarts it
+      delayed.push(id);
+    }
+  }
 
   const running = await db
     .select({
@@ -49,8 +57,15 @@ export async function sweep(db: Db, deps: Pick<JobDeps, "queue" | "now" | "getAv
     if (d.lockToken !== null && (d.lockedAt ?? 0) > now() - LOCK_TTL_MS) continue; // a turn is in progress
     const expectedBy = Math.max(d.startedAt ?? 0, d.lastTurnAt ?? 0, d.nextAttemptAt ?? 0);
     if (now() - expectedBy < STALL_MS) continue;
-    await deps.queue.enqueueAdvance(d.id, { now: now() });
-    restarted.push(d.id);
+    try {
+      await deps.queue.enqueueAdvance(d.id, { now: now() });
+      restarted.push(d.id);
+    } catch {
+      // The queue refused (down, or its daily limit reached): say so on the debate and keep going;
+      // the next sweep tries again.
+      await markQueueDelayed(db, d.id);
+      delayed.push(d.id);
+    }
   }
-  return { ...due, restarted };
+  return { ...due, restarted, delayed };
 }

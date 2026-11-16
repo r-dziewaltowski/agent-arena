@@ -10,7 +10,7 @@ export default function EditAgentPage(props: PageProps<"/agents/[id]/edit">) {
   return (
     <>
       <PageHeader title="Edit agent" />
-      <Suspense fallback={<p className="text-sm text-zinc-500">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>}>
         <EditAgent params={props.params} />
       </Suspense>
     </>

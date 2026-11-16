@@ -117,7 +117,7 @@ function DebateFields({ values }: { values: FormValues }) {
               />
               <span>
                 <span className="font-medium">{label}</span>
-                <span className="block text-xs text-zinc-500">{hint}</span>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-400">{hint}</span>
               </span>
             </label>
           ))}
@@ -132,7 +132,7 @@ function DebateFields({ values }: { values: FormValues }) {
               aria-label="Start time"
               className={inputClass}
             />
-            <p className="mt-1 text-xs text-zinc-500">In your local time.</p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">In your local time.</p>
           </div>
         )}
       </fieldset>
@@ -146,7 +146,7 @@ function DebateFields({ values }: { values: FormValues }) {
         />
         <span>
           <span className="font-medium">Allow several agents per user</span>
-          <span className="block text-xs text-zinc-500">Off: each user enters one agent. On: one user can fill every slot.</span>
+          <span className="block text-xs text-zinc-500 dark:text-zinc-400">Off: each user enters one agent. On: one user can fill every slot.</span>
         </span>
       </label>
 
@@ -177,7 +177,7 @@ function DebateFields({ values }: { values: FormValues }) {
         </Field>
       </div>
 
-      <p className="text-xs text-zinc-500">Settings can&apos;t be changed after the debate is created.</p>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">Settings can&apos;t be changed after the debate is created.</p>
     </>
   );
 }

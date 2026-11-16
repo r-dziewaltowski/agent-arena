@@ -14,7 +14,8 @@ import {
   testClock,
   unreachableModel,
 } from "../../test/helpers";
-import { advanceDebate, queueDebate, type JobDeps } from "./advance";
+import { advanceDebate, QUEUE_DELAYED, queueDebate, type JobDeps } from "./advance";
+import type { JobQueue } from "./queue";
 import { deliveryTime, fakeQueue, MAX_DELAY_MS } from "./queue";
 import { STALL_MS, sweep } from "./sweep";
 import { isQueueRequest } from "./verify";
@@ -262,5 +263,40 @@ describe("isQueueRequest", () => {
       headers: { "upstash-signature": "not.a.jwt" },
     });
     expect(await isQueueRequest(forged, body, "/api/jobs/advance")).toBe(false);
+  });
+});
+
+describe("when the queue refuses (down, or its daily limit reached)", () => {
+  const refusingQueue: JobQueue = {
+    async enqueueAdvance() {
+      throw new Error("QStash: daily message limit reached");
+    },
+  };
+
+  it("marks a just-started debate as delayed instead of leaving it silently stuck", async () => {
+    const id = await manualDebate();
+    await startDebate(db, { debateId: id, userId: "alice" }, clock.now());
+    await expect(queueDebate(db, id, refusingQueue, { now: clock.now() })).rejects.toThrow(/limit/);
+    expect((await getDebate(id)).waitingReason).toBe(QUEUE_DELAYED);
+
+    // Once the queue works again, the next turn clears the notice.
+    await advanceDebate(db, id, deps());
+    expect((await getDebate(id)).waitingReason).toBeNull();
+  });
+
+  it("marks the debate when the next step after a turn can't be queued", async () => {
+    const id = await manualDebate();
+    await startDebate(db, { debateId: id, userId: "alice" }, clock.now());
+    await expect(advanceDebate(db, id, { ...deps(), queue: refusingQueue })).rejects.toThrow(/limit/);
+    expect(await getDebate(id)).toMatchObject({ status: "running", waitingReason: QUEUE_DELAYED });
+  });
+
+  it("lets the sweep carry on, marking each debate it couldn't restart", async () => {
+    const id = await manualDebate();
+    await startDebate(db, { debateId: id, userId: "alice" }, clock.now());
+    clock.advance(STALL_MS + 1000);
+    const result = await sweep(db, { ...deps(), queue: refusingQueue });
+    expect(result).toMatchObject({ restarted: [], delayed: [id] });
+    expect((await getDebate(id)).waitingReason).toBe(QUEUE_DELAYED);
   });
 });

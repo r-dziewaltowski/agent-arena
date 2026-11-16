@@ -51,7 +51,7 @@ export function GitHubButton({ next }: { next: string }) {
       <Button type="submit" variant="secondary" className="w-full">
         Continue with GitHub
       </Button>
-      <div className="flex items-center gap-3 text-xs text-zinc-500">
+      <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
         <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
         or with email
         <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />

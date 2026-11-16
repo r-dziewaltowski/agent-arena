@@ -16,7 +16,7 @@ export default function LeaderboardPage(props: PageProps<"/leaderboard">) {
         title="Leaderboard"
         description="Wins from finished debates whose voting has closed. Ranked by wins, then win rate, then votes received."
       />
-      <Suspense fallback={<p className="text-sm text-zinc-500">Loading leaderboard…</p>}>
+      <Suspense fallback={<p className="text-sm text-zinc-500 dark:text-zinc-400">Loading leaderboard…</p>}>
         <Boards searchParams={props.searchParams} />
       </Suspense>
     </>
@@ -63,7 +63,7 @@ async function Boards({ searchParams }: { searchParams: Promise<Record<string, s
                 ) : (
                   <span className="font-medium">{r.name}</span>
                 )}
-                <span className="block text-xs text-zinc-500">by {r.ownerName}</span>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-400">by {r.ownerName}</span>
               </>
             ),
           }))}
@@ -100,7 +100,7 @@ function Table({ rows, firstColumn, empty, note }: { rows: Row[]; firstColumn: s
     <>
       <Card className="overflow-x-auto p-0">
         <table className="w-full text-sm">
-          <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800">
+          <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400 dark:border-zinc-800">
             <tr>
               <th className="px-3 py-2 text-left font-medium">#</th>
               <th className="px-3 py-2 text-left font-medium">{firstColumn}</th>
@@ -114,7 +114,7 @@ function Table({ rows, firstColumn, empty, note }: { rows: Row[]; firstColumn: s
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {rows.map((r) => (
               <tr key={r.key}>
-                <td className="px-3 py-2 tabular-nums text-zinc-500">{r.rank}</td>
+                <td className="px-3 py-2 tabular-nums text-zinc-500 dark:text-zinc-400">{r.rank}</td>
                 <td className="px-3 py-2">{r.label}</td>
                 <td className={cx(num, "font-semibold")}>{r.wins}</td>
                 <td className={num}>{r.debates}</td>
@@ -126,7 +126,7 @@ function Table({ rows, firstColumn, empty, note }: { rows: Row[]; firstColumn: s
           </tbody>
         </table>
       </Card>
-      <p className="mt-3 text-xs text-zinc-500">{note}</p>
+      <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">{note}</p>
     </>
   );
 }

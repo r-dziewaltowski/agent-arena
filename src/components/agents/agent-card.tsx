@@ -27,7 +27,7 @@ export function AgentCard({
           <Link href={`/agents/${agent.id}`} className="text-lg font-semibold hover:underline">
             {agent.name}
           </Link>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
             {modelLabel(agent.provider, agent.modelId)} · {CREATIVITY_LABELS[agent.creativity as Creativity].label} ·{" "}
             {TURN_LENGTH_LABELS[agent.turnLength as TurnLength].label} turns
           </p>

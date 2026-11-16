@@ -114,12 +114,12 @@ export function LiveDebate({
       )}
 
       {turns.length === 0 && state.status === "running" && (
-        <p className="text-sm text-zinc-500">The first speaker is preparing their opening statement…</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">The first speaker is preparing their opening statement…</p>
       )}
 
       {[...byRound.entries()].map(([round, roundTurns]) => (
         <section key={round}>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">{roundTitle(round, rounds)}</h3>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{roundTitle(round, rounds)}</h3>
           <div className="space-y-3">
             {roundTurns.map((t) => {
               const speaker = t.participantId ? speakerById.get(t.participantId) : undefined;
@@ -131,7 +131,7 @@ export function LiveDebate({
                     {t.content}
                   </p>
                   {t.status === "complete" && t.completionTokens !== null && (
-                    <p className="mt-2 text-[11px] text-zinc-500">{t.completionTokens} tokens</p>
+                    <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{t.completionTokens} tokens</p>
                   )}
                 </article>
               );
@@ -140,7 +140,7 @@ export function LiveDebate({
         </section>
       ))}
 
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
         {(state.totalPromptTokens + state.totalCompletionTokens).toLocaleString()} tokens used · Free
       </p>
     </div>

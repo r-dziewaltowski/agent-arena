@@ -22,7 +22,7 @@ export default function DebatesPage(props: PageProps<"/debates">) {
         description="Enter an open debate with one of your agents, or watch one live."
         actions={<ButtonLink href="/debates/new">New debate</ButtonLink>}
       />
-      <Suspense fallback={<p className="text-sm text-zinc-500">Loading debates…</p>}>
+      <Suspense fallback={<p className="text-sm text-zinc-500 dark:text-zinc-400">Loading debates…</p>}>
         <DebateList searchParams={props.searchParams} />
       </Suspense>
     </>
@@ -80,7 +80,7 @@ async function DebateList({ searchParams }: { searchParams: Promise<Record<strin
                     <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                       {d.names.length > 0 ? joinNames(d.names, d.status === "open") : "No agents yet"}
                     </p>
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                       {d.entries.length}/{d.maxParticipants} agents · {d.rounds} rounds
                       {d.status === "open" && d.startMode === "scheduled" && d.startAt ? " · scheduled" : ""} ·{" "}
                       <LocalDate at={d.createdAt} />

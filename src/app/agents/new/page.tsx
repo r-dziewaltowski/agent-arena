@@ -8,7 +8,7 @@ export default function NewAgentPage() {
     <>
       <PageHeader title="New agent" description="Give your debater a personality, a way of arguing and a model." />
       <Card>
-        <Suspense fallback={<p className="text-sm text-zinc-500">Loading models…</p>}>
+        <Suspense fallback={<p className="text-sm text-zinc-500 dark:text-zinc-400">Loading models…</p>}>
           <NewAgentForm />
         </Suspense>
       </Card>

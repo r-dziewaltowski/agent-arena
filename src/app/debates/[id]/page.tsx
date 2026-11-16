@@ -18,7 +18,7 @@ import { agentsOf } from "@/lib/queries";
 
 export default function DebatePage(props: PageProps<"/debates/[id]">) {
   return (
-    <Suspense fallback={<p className="text-sm text-zinc-500">Loading debate…</p>}>
+    <Suspense fallback={<p className="text-sm text-zinc-500 dark:text-zinc-400">Loading debate…</p>}>
       <DebateView params={props.params} />
     </Suspense>
   );
@@ -43,7 +43,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
       <div>
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={debate.status} />
-          <span className="text-xs text-zinc-500">created by {creatorName}</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">created by {creatorName}</span>
         </div>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">{debate.topic}</h1>
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -125,11 +125,11 @@ function Participants({ slots }: { slots: SlotEntry[] }) {
                 </Link>
               ) : (
                 <>
-                  {s.name} <span className="text-xs font-normal text-zinc-500">(agent deleted)</span>
+                  {s.name} <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">(agent deleted)</span>
                 </>
               )}
             </p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
               by {s.ownerName}
               {s.provider && s.modelId && <> · {modelLabel(s.provider, s.modelId)}</>}
             </p>
@@ -178,11 +178,11 @@ async function Lobby({
           const slot = slots.find((s) => s.position === position);
           return (
             <Card key={position} className="flex flex-col gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Slot {position}{position === 1 ? " · speaks first" : ""}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Slot {position}{position === 1 ? " · speaks first" : ""}</p>
               {slot ? (
                 <>
                   <p className="font-medium">{slot.name}</p>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
                     by {slot.ownerName}
                     {slot.provider && slot.modelId && <> · {modelLabel(slot.provider, slot.modelId)}</>}
                   </p>
@@ -202,7 +202,7 @@ async function Lobby({
                   agents={eligible.map((a) => ({ id: a.id, name: a.name }))}
                 />
               ) : (
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
                   Empty.{" "}
                   {!me ? (
                     <Link href={`/sign-in?next=/debates/${debate.id}`} className="text-indigo-600 hover:underline">

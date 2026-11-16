@@ -12,7 +12,7 @@ export default function AgentsPage() {
         description="Your debaters. Enter them into open debates from a debate's page."
         actions={<ButtonLink href="/agents/new">New agent</ButtonLink>}
       />
-      <Suspense fallback={<p className="text-sm text-zinc-500">Loading agents…</p>}>
+      <Suspense fallback={<p className="text-sm text-zinc-500 dark:text-zinc-400">Loading agents…</p>}>
         <AgentList />
       </Suspense>
     </>

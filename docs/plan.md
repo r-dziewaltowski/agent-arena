@@ -22,6 +22,35 @@ Environment (current machine, 2026-11-15): Node 26.13.1, npm 11.20, git 2.56, Ol
 
 > **M0 is done** (commit `253f5ee`). `.env.example` and `.env.local` are created by hand; the variables are listed in the README.
 
+## How we work
+
+- Process: the app-builder skill (personal Claude Code skill), technical profile. The owner decides fundamental and budget-dependent choices; minor ones are decided and announced.
+- Budget: $0 a month. The project never pays for model calls; nothing may bill a card.
+- Commits and pushes only when the owner says so; pushing to `main` deploys production.
+- Each milestone ends runnable, tested (unit + end-to-end), checked in the browser and committed.
+
+## Use cases
+
+1. As a visitor, I can browse debates, watch a running one update live, and read finished transcripts and results, without an account.
+2. As a user, I can sign up (email and password, or GitHub) and sign in.
+3. As a user, I can create, edit and delete my agents: a persona, style, tone, stance, model, creativity, turn length and visibility. Each of my agents has its own name.
+4. As a user, I can create a debate (topic, rounds, number of agents, how it starts, voting rules) and delete it while it's open.
+5. As a user, I can enter one of my agents into an open debate (or several, if the debate allows) and withdraw before it starts.
+6. As a debate's creator, I can start a manual debate; "when full" and scheduled debates start by themselves, and run to the end with nobody watching.
+7. As a user, I can vote once for an agent that isn't mine while voting is open, and see the counts per the debate's rule.
+8. As a debate's creator or an admin, I can resume a debate that failed.
+9. As anyone, I can see leaderboards of agents and users, from debates whose voting has closed.
+10. As an admin, I can delete any debate or agent.
+
+Not covered yet (product decisions pending): password reset, deleting your own account, a privacy notice.
+
+## Accepted risks
+
+| Risk | Why accepted | Revisit when |
+|---|---|---|
+| No per-user limits: one user (or a bot signing up) can use up the shared free daily quotas (Groq tokens, QStash ~1,000 messages), pausing debates for everyone until the next day | Portfolio project; the worst case is a pause, never a bill | The site gets real traffic, or abuse is seen |
+| No email verification at sign-up | Same; also keeps sign-up frictionless | As above, or when emails are used for anything |
+
 ## Architecture in one paragraph
 
 A debate is a persisted state machine, not a long-running process. It is created **open**: users enter their own agents into free speaking slots until it starts (manually, when full, or at a scheduled time). A **hosted queue** (Upstash QStash; its local dev server in development) drives every running debate: a queued message makes QStash call the app's job route, which calls `runStep` to generate exactly one agent turn (one LLM call), writing the partial text to the database every ~300 ms while the model streams, then saves the finished turn, advances the pointer and queues the next message (immediately, or after a delay when the model is rate-limited or unreachable). Starting a debate queues its first message; a scheduled debate gets a delayed message for its start time; a sweep every few minutes restarts any chain that was lost. Viewers never drive anything: the debate page polls `GET /api/debates/[id]/turns?after=seq`, which includes the in-progress turn, so every viewer sees it appear word by word. A lock guarantees one turn at a time per debate even if a message is delivered twice. Because each step is saved, the design survives restarts and is trivially resumable; `runStep` doesn't care who calls it (the job route, the terminal CLI, tests). Turn order is strict round-robin by slot: round 1 openings, middle rounds arguments, last round closings. Context stays bounded via a window of the last 6 turns plus a rolling summary. Voting opens when the debate completes and closes after the debate's voting duration: one vote per user, never for your own agent.
@@ -196,6 +225,35 @@ _Leaderboard: ✅ done first (2026-11-16)._ `/leaderboard` (public, header link)
 **Later, optional.**
 - Debate modes: binary choice (each entrant picks for/against), multiple choice (creator lists options, each entrant defends one), free discussion (today's behaviour, the default).
 - Push instead of polling: replace the `broadcast.ts` no-op with hosted pub/sub (Ably, Pusher or Upstash) or an SSE route, so viewers get chunks pushed rather than polling. Polling stays as the fallback.
+
+## Failure modes
+
+| What fails | What the app does | What users see | Tested by |
+|---|---|---|---|
+| Model unreachable or timing out | Turn discarded; waits with growing delays (30 s doubling to 10 min); never fails for this | "Waiting for the model to become available" with a countdown | `engine.test.ts` |
+| Model rate-limited (HTTP 429, incl. the daily free limit) | Waits, honouring `retry-after` (up to 24 h) | "The model's free usage limit was reached; waiting until it resets" | `engine.test.ts` |
+| Bad turn (empty output, model error) | Retried twice, then the debate fails with the reason stored | Plain-language failure notice; raw details and Resume for the creator/admins | `engine.test.ts`, `lifecycle.test.ts`, e2e |
+| Model retired since the debate started | Resume switches those agents to the provider's default | "Ran on X: its chosen model has been retired" | `lifecycle.test.ts` |
+| Crash or kill mid-turn | Lock expires after 90 s; the half-written turn is discarded and regenerated | A short pause | `engine.test.ts` |
+| Queue message duplicated | The lock lets one call work; the other stops | Nothing | `jobs.test.ts` |
+| Queue message lost | The sweep (every 10 min in production) restarts debates idle for 2 min past their due time | A short pause | `jobs.test.ts` |
+| Queue refuses (down, or the daily message limit reached) | The debate is marked delayed; the sweep retries | "Delayed: the service that runs debates is busy right now. It will continue automatically." | `jobs.test.ts` |
+| Database unreachable | Job routes return 500, so QStash retries the message; pages show an error page | Error page | Manual |
+| Missing configuration on Vercel | The build fails with a clear message (`DATABASE_URL`, https address) | Deploy fails visibly | Build |
+| Two users take the same slot / double vote | Unique indexes and transactions; the loser gets a message | "That slot was just taken", "You have already voted" | `lifecycle.test.ts` |
+| Bad deploy | Roll back in Vercel: Deployments → the previous one → "Promote to Production". Migrations so far are additive (0003 renamed duplicates; not undone by a rollback, but harmless) | Brief | Procedure noted |
+| Data loss | Turso free plan: point-in-time restore within the last 24 hours (per Turso's docs; paid plans keep longer) | — | Not tested |
+
+## Performance targets
+
+| Page / action | Target | Measured (2026-11-16, from Kuala Lumpur, production in Singapore) |
+|---|---|---|
+| Main pages (debates, leaderboard, a debate) | Under 1 s | 0.1–0.3 s warm; 0.8–1.7 s on the first request after idle (serverless start-up) |
+| Live turns poll (`/api/debates/[id]/turns`) | Under 0.5 s | 0.1–0.2 s warm |
+| A short debate (2 rounds, 2 agents) on Groq | Under 30 s | ~5–10 s through the queue |
+| Lighthouse, `/debates` | All categories ≥ 90 | Performance 100, accessibility 95 (dark-mode grey text contrast, fixed since), best practices 100, SEO 100 |
+
+Live views poll about once a second while a debate runs; partial text is written every ~300 ms during a turn. The leaderboard is computed per request from all closed debates (fine at this size; cache it if it grows).
 
 ## Scaling path (not planned for v1)
 

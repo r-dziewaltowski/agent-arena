@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     for (const id of result.started) jobLog(`sweep: started scheduled debate ${id}`);
     for (const id of result.cancelled) jobLog(`sweep: cancelled scheduled debate ${id} (not enough agents)`);
     for (const id of result.restarted) jobLog(`sweep: restarted stalled debate ${id}`);
+    for (const id of result.delayed) jobLog(`sweep: couldn't queue debate ${id}; marked as delayed`);
     return Response.json(result);
   } catch (err) {
     console.error("[jobs] sweep failed", err);

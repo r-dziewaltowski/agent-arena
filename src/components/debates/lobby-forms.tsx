@@ -41,7 +41,7 @@ export function StartForm({ debateId, disabled }: { debateId: string; disabled: 
       <Button type="submit" disabled={disabled || pending}>
         {pending ? "Starting…" : "Start debate"}
       </Button>
-      {disabled && <span className="text-xs text-zinc-500">Needs at least 2 agents.</span>}
+      {disabled && <span className="text-xs text-zinc-500 dark:text-zinc-400">Needs at least 2 agents.</span>}
       {state.message && <span className="text-xs text-red-600 dark:text-red-400">{state.message}</span>}
     </form>
   );

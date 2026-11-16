@@ -21,8 +21,20 @@ export function gmailConfigured(): boolean {
   return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
 }
 
-export function gmailSender(user = process.env.GMAIL_USER!, pass = process.env.GMAIL_APP_PASSWORD!): EmailSender {
-  const transport = nodemailer.createTransport({ service: "gmail", auth: { user, pass } });
+/** The Gmail settings, forgiving the usual paste slips: spaces Google shows in app passwords, stray whitespace. */
+export function gmailCredentials(): { user: string; pass: string } {
+  return {
+    user: (process.env.GMAIL_USER ?? "").trim(),
+    pass: (process.env.GMAIL_APP_PASSWORD ?? "").replace(/\s+/g, ""),
+  };
+}
+
+export function gmailTransport(user: string, pass: string) {
+  return nodemailer.createTransport({ service: "gmail", auth: { user, pass } });
+}
+
+export function gmailSender({ user, pass } = gmailCredentials()): EmailSender {
+  const transport = gmailTransport(user, pass);
   return {
     async send(email) {
       await transport.sendMail({ from: `"${APP_NAME}" <${user}>`, ...email });

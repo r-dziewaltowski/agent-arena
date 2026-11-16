@@ -47,6 +47,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
+        <footer className="border-t border-zinc-200 dark:border-zinc-800">
+          <div className="mx-auto flex max-w-5xl gap-4 px-4 py-4 text-sm text-zinc-600 dark:text-zinc-400">
+            <Link href="/privacy" className="hover:text-zinc-900 hover:underline dark:hover:text-zinc-100">
+              Privacy
+            </Link>
+            <a href="https://github.com/r-dziewaltowski/agent-arena" className="hover:text-zinc-900 hover:underline dark:hover:text-zinc-100">
+              Source on GitHub
+            </a>
+          </div>
+        </footer>
       </body>
     </html>
   );

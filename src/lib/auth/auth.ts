@@ -3,6 +3,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { getDbSync } from "../db/client";
 import * as schema from "../db/schema";
+import { sendEmail } from "../email/send";
+import { alreadyRegistered, confirmEmail, resetPassword } from "../email/templates";
 
 /**
  * A Vercel preview has its own addresses (one per deployment, one per branch), so instead of a
@@ -35,6 +37,26 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
+    // New accounts confirm their email before signing in (existing ones were grandfathered).
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendEmail(resetPassword(user.email, nameOf(user), url));
+    },
+    // A reset signs out every other session (e.g. an attacker's).
+    revokeSessionsOnPasswordReset: true,
+    // Signing up with a registered email reveals nothing to the visitor; the owner gets a note instead.
+    onExistingUserSignUp: async ({ user }, request) => {
+      await sendEmail(alreadyRegistered(user.email, nameOf(user), siteOrigin(request)));
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    // Trying to sign in unconfirmed sends a fresh link.
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendEmail(confirmEmail(user.email, nameOf(user), url));
+    },
   },
   // GitHub sign-in, switched on only when its OAuth app credentials are set.
   socialProviders: githubEnabled()
@@ -59,6 +81,18 @@ export const auth = betterAuth({
 });
 
 export type Auth = typeof auth;
+
+/** How a person is greeted in emails: their display name, else Better Auth's `name`. */
+function nameOf(user: { name: string; displayName?: unknown }): string {
+  return typeof user.displayName === "string" && user.displayName ? user.displayName : user.name;
+}
+
+/** The site's address for links in emails sent outside a Better Auth URL (e.g. "already registered"). */
+function siteOrigin(request?: Request): string {
+  if (request) return new URL(request.url).origin;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+}
 
 export function githubEnabled(): boolean {
   return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);

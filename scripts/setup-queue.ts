@@ -7,6 +7,7 @@
  * Locally there's no need: `npm run dev` creates it on the dev server at startup.
  */
 import "./load-env";
+import { PRODUCTION_SWEEP_CRON } from "../src/lib/jobs/config";
 import { ensureSweepSchedule, SWEEP_PATH } from "../src/lib/jobs/queue";
 
 const baseUrl = process.env.APP_URL?.replace(/\/$/, "");
@@ -14,7 +15,7 @@ if (!baseUrl?.startsWith("https://")) {
   console.error("Set APP_URL to the deployment's https:// address, e.g. APP_URL=https://agent-arena.vercel.app");
   process.exit(1);
 }
-const cron = process.env.SWEEP_CRON ?? "*/10 * * * *";
+const cron = process.env.SWEEP_CRON ?? PRODUCTION_SWEEP_CRON;
 
 ensureSweepSchedule({ baseUrl, cron })
   .then(() => console.log(`Sweep schedule set: "${cron}" → ${baseUrl}${SWEEP_PATH}`))

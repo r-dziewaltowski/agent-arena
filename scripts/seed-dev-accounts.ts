@@ -32,8 +32,8 @@ async function main() {
   for (const u of DEV_USERS) {
     await db
       .insert(user)
-      .values({ id: u.id, name: u.name, email: u.email, displayName: u.name, isAdmin: u.isAdmin, createdAt: now, updatedAt: now })
-      .onConflictDoUpdate({ target: user.id, set: { email: u.email, displayName: u.name, isAdmin: u.isAdmin, updatedAt: now } });
+      .values({ id: u.id, name: u.name, email: u.email, emailVerified: true, displayName: u.name, isAdmin: u.isAdmin, createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({ target: user.id, set: { email: u.email, emailVerified: true, displayName: u.name, isAdmin: u.isAdmin, updatedAt: now } });
 
     // Better Auth signs in with the "credential" account whose accountId is the user's id.
     const [existing] = await db

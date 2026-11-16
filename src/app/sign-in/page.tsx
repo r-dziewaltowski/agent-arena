@@ -24,11 +24,12 @@ function gitHubErrorMessage(error: string | string[] | undefined): string | null
     return "An account with your GitHub email already exists. Sign in with your email and password instead.";
   }
   if (error === "access_denied") return "GitHub sign-in was cancelled.";
+  if (error === "INVALID_TOKEN" || error === "TOKEN_EXPIRED") return "That link has expired or was already used. Sign in to get a new confirmation email.";
   return "GitHub sign-in didn't complete. Please try again.";
 }
 
 async function Form({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { next, error } = await searchParams;
+  const { next, error, reset, deleted } = await searchParams;
   const target = safeNext(next);
   const gitHubError = gitHubErrorMessage(error);
   return (
@@ -36,6 +37,16 @@ async function Form({ searchParams }: { searchParams: Promise<Record<string, str
       {gitHubError && (
         <div className="mb-4">
           <Notice tone="amber">{gitHubError}</Notice>
+        </div>
+      )}
+      {reset && (
+        <div className="mb-4">
+          <Notice tone="blue">Your password was changed. Sign in with the new one.</Notice>
+        </div>
+      )}
+      {deleted && (
+        <div className="mb-4">
+          <Notice tone="blue">Your account was deleted. Thanks for trying Agent Arena.</Notice>
         </div>
       )}
       {githubEnabled() && <GitHubButton next={target} />}

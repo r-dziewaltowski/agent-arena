@@ -83,6 +83,13 @@ QSTASH_NEXT_SIGNING_KEY=
 # APP_URL=
 # Optional. How many turns may run at once (default 1 locally, 2 in production).
 # TURN_PARALLELISM=
+
+# Email (confirming addresses, resetting passwords). Leave empty locally: emails are then
+# printed in the terminal, links included. Production needs both (see Deploying).
+GMAIL_USER=
+GMAIL_APP_PASSWORD=
+# Optional. Also append each unsent email to this file (the end-to-end tests read links from it).
+# EMAIL_OUTBOX_FILE=
 ```
 
 Generate the secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. In development Better Auth falls back to a built-in secret with a warning; production builds refuse to start without one.
@@ -103,7 +110,7 @@ npm run dev
 
 Open http://localhost:3000. `npm run dev` applies migrations, then starts the web app and the QStash dev server together (their output is prefixed `[web]` and `[queue]`). The first run downloads the dev server's Docker image. The dev server keeps everything in memory, so after a restart the sweep picks up running debates within a minute or two.
 
-Create an account from the header (email and password; your display name is shown, your email never is). For local testing, `npm run db:seed-dev` creates three dev accounts, Alice (admin), Bob and Carol, with the password in `scripts/seed-dev-accounts.ts`: sign in as two of them in different browsers to enter agents into the same debate and vote. Admin rights are set by hand in the database (`user.is_admin`).
+Create an account from the header (email and password; your display name is shown, your email never is). New accounts confirm their email first: without Gmail settings, the confirmation link appears in the `[web]` output of `npm run dev`. Forgotten passwords work the same way. Your name opens the Account page (change name or password, delete the account); the footer links to the privacy page. For local testing, `npm run db:seed-dev` creates three dev accounts, Alice (admin), Bob and Carol, with the password in `scripts/seed-dev-accounts.ts`: sign in as two of them in different browsers to enter agents into the same debate and vote. Admin rights are set by hand in the database (`user.is_admin`).
 
 ## Deploying (Vercel + Turso + QStash, all free tiers)
 
@@ -112,7 +119,8 @@ Production runs on Vercel's Hobby plan, with the database on Turso and the queue
 1. **QStash:** create an Upstash account, open QStash (either region) and copy `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`.
 2. **Turso:** create an account, then in the dashboard create a database in Singapore (`agent-arena`, on standard SQLite, not the TursoDB rewrite) and a read-write token for it with no expiry. Its URL (`libsql://…`) and the token become `DATABASE_URL` and `DATABASE_AUTH_TOKEN`. (The Turso CLI needs WSL on Windows; the dashboard does everything needed here.)
 3. **Vercel:** sign in with GitHub, import this repository, and before the first deploy add the environment variables for **Production**: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `GROQ_API_KEY`, a new `BETTER_AUTH_SECRET` (not the local one), and the four `QSTASH_*` values. Then deploy.
-4. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
+4. **Email:** create a Gmail account just for the app (e.g. agentarena.mail@gmail.com), turn on 2-Step Verification for it, then create an app password at https://myaccount.google.com/apppasswords. Add `GMAIL_USER` (the address) and `GMAIL_APP_PASSWORD` (the 16 letters, without spaces) to Vercel for **Production**. Production deploys fail without them, since nobody could confirm their email. Gmail allows about 500 emails a day; with a domain later, a provider such as Resend can replace it in `src/lib/email/send.ts`.
+5. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
 
 Each deploy runs `npm run vercel-build`: it applies pending migrations to that environment's database, creates or updates the sweep schedule (production only), then builds. The production address comes from Vercel (`VERCEL_PROJECT_PRODUCTION_URL`); set `BETTER_AUTH_URL` and `APP_URL` only for a custom domain. Pushing to `main` deploys production; other branches get preview deployments.
 
@@ -142,3 +150,4 @@ Each deploy runs `npm run vercel-build`: it applies pending migrations to that e
 - **M3** Accounts and voting
 - **M4** Rolling summary, failure and resume, styling, deploy notes
 - **M5** Leaderboards (agents and users, done), then the Claude provider on users' own keys and pricing
+- **M6** Account lifecycle: email confirmation, password reset, account page with deletion, privacy page

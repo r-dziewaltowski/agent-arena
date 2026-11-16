@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { linkFromEmail } from "./outbox";
 
 /**
  * The main product loop through a real browser: two users sign up, build agents, enter a debate
@@ -23,6 +24,13 @@ async function newUserPage(browser: Browser, user: typeof alice, mode: "sign-up"
   await page.locator(field("email")).fill(user.email);
   await page.locator(field("password")).fill(PASSWORD);
   await page.getByRole("button", { name: mode === "sign-up" ? "Create account" : "Sign in" }).click();
+  if (mode === "sign-up") {
+    // New accounts confirm their email first: follow the link from the outbox.
+    await expect(page.getByText("Check your email")).toBeVisible();
+    await page.goto(await linkFromEmail(user.email, "Confirm your email"));
+    await expect(page.getByRole("heading", { name: `You're in, ${user.name}` })).toBeVisible();
+    await page.getByRole("link", { name: "Continue" }).click();
+  }
   await expect(page).toHaveURL(/\/debates$/);
   await expect(page.getByText(user.name, { exact: true })).toBeVisible();
   return page;

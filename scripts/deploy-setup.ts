@@ -1,12 +1,14 @@
 /**
  * Runs on Vercel before `next build` (the `vercel-build` script): applies pending migrations to
- * this environment's database, and on production creates or updates the queue's sweep schedule.
+ * this environment's database, and on production checks that email is set up and creates or
+ * updates the queue's sweep schedule.
  * Previews get no sweep schedule; they are short-lived and their debates rarely need rescuing.
  */
 import "./load-env";
 import { openDb } from "../src/lib/db/client";
 import { runMigrations } from "../src/lib/db/migrate";
-import { appUrl } from "../src/lib/jobs/config";
+import { gmailConfigured } from "../src/lib/email/send";
+import { appUrl, PRODUCTION_SWEEP_CRON } from "../src/lib/jobs/config";
 import { ensureSweepSchedule, SWEEP_PATH } from "../src/lib/jobs/queue";
 
 async function main() {
@@ -20,9 +22,11 @@ async function main() {
   console.log("Migrations applied.");
 
   if (process.env.VERCEL_ENV === "production") {
+    // Without these, nobody could confirm their email or reset a password: fail the deploy instead.
+    if (!gmailConfigured()) throw new Error("Set GMAIL_USER and GMAIL_APP_PASSWORD for Production (see the README).");
     const baseUrl = appUrl();
     if (!baseUrl.startsWith("https://")) throw new Error(`The production address isn't https: ${baseUrl}`);
-    const cron = process.env.SWEEP_CRON ?? "*/10 * * * *";
+    const cron = process.env.SWEEP_CRON ?? PRODUCTION_SWEEP_CRON;
     await ensureSweepSchedule({ baseUrl, cron });
     console.log(`Sweep schedule set: "${cron}" → ${baseUrl}${SWEEP_PATH}`);
   }

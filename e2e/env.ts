@@ -7,6 +7,8 @@
 export const E2E_PORT = 3100;
 export const E2E_BASE_URL = `http://localhost:${E2E_PORT}`;
 export const QSTASH_DEV_URL = "http://127.0.0.1:8080";
+/** Emails the app "sends" during the tests land here, one JSON object per line. */
+export const EMAIL_OUTBOX_FILE = "data/e2e-outbox.jsonl";
 
 export const e2eEnv: Record<string, string> = {
   NODE_ENV: "production",
@@ -29,4 +31,8 @@ export const e2eEnv: Record<string, string> = {
   // GitHub sign-in stays off in the tests, even if .env.local sets it up.
   GITHUB_CLIENT_ID: "",
   GITHUB_CLIENT_SECRET: "",
+  // No real email: everything goes to the outbox file, where the tests read the links.
+  GMAIL_USER: "",
+  GMAIL_APP_PASSWORD: "",
+  EMAIL_OUTBOX_FILE,
 };

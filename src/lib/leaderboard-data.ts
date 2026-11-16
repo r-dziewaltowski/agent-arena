@@ -1,8 +1,8 @@
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { connection } from "next/server";
 import { displayNames } from "./auth/session";
 import { getDb } from "./db/client";
-import { agents, debateParticipants, debates, votes } from "./db/schema";
+import { agents, debateParticipants, debates, user, votes } from "./db/schema";
 import { agentStandings, rank, userStandings, type FinalDebate } from "./leaderboard";
 
 /** How many rows each board shows. */
@@ -46,7 +46,11 @@ export async function loadLeaderboards() {
   }));
 
   const agentRows = rank(agentStandings(finals)).slice(0, LEADERBOARD_SIZE);
-  const userRows = rank(userStandings(finals)).slice(0, LEADERBOARD_SIZE);
+  // People who deleted their account keep their debates' history, but drop off the users board.
+  const deleted = new Set((await db.select({ id: user.id }).from(user).where(isNotNull(user.deletedAt))).map((u) => u.id));
+  const userTable = userStandings(finals);
+  for (const id of deleted) userTable.delete(id);
+  const userRows = rank(userTable).slice(0, LEADERBOARD_SIZE);
 
   const agentInfo = agentRows.length
     ? await db

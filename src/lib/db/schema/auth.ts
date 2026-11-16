@@ -25,6 +25,11 @@ export const user = sqliteTable("user", {
   displayName: text("display_name").notNull(),
   /** Set by hand in the database; users can't set it (input: false). */
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+  /**
+   * When the person deleted their account. The row is kept, anonymised ("Deleted user", no email
+   * or logins), so debates they created and votes they cast stay intact.
+   */
+  deletedAt: integer("deleted_at"),
 });
 
 export const session = sqliteTable(

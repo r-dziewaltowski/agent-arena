@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { signOutAction } from "@/actions/auth";
 import { getCurrentUser } from "@/lib/auth/session";
 import { AuthLink, ReturnPathInput } from "./auth-links";
@@ -21,7 +22,9 @@ export async function UserMenu() {
   return (
     <form action={signOutAction} className="flex items-center gap-3 text-sm">
       <ReturnPathInput />
-      <span className="font-medium">{me.displayName}</span>
+      <Link href="/account" title="Your account" className="font-medium hover:underline">
+        {me.displayName}
+      </Link>
       {me.isAdmin && <Badge tone="amber">admin</Badge>}
       <Button type="submit" variant="ghost" className="px-1">
         Sign out

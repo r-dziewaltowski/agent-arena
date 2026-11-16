@@ -28,9 +28,16 @@ export function turnParallelism(): number {
   return isProduction() ? 2 : 1;
 }
 
-/** How often the sweep runs: every 10 minutes in production (it costs queue messages), every minute locally. */
+/**
+ * The sweep's production schedule: every 30 minutes. Each run costs a queue message (48 a day,
+ * about 5% of QStash's free ~1,000), and it only rescues work that was lost (rare) or a scheduled
+ * start whose delayed message never arrived, so a lost debate waits at most ~30 minutes longer.
+ */
+export const PRODUCTION_SWEEP_CRON = "*/30 * * * *";
+
+/** How often the sweep runs: every 30 minutes in production, every minute locally (free there). */
 export function sweepCron(): string {
-  return process.env.SWEEP_CRON ?? (isProduction() ? "*/10 * * * *" : "* * * * *");
+  return process.env.SWEEP_CRON ?? (isProduction() ? PRODUCTION_SWEEP_CRON : "* * * * *");
 }
 
 export class QueueNotConfiguredError extends Error {

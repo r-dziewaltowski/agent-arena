@@ -5,7 +5,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
-import { E2E_PORT, e2eEnv, QSTASH_DEV_URL } from "../e2e/env";
+import { E2E_PORT, EMAIL_OUTBOX_FILE, e2eEnv, QSTASH_DEV_URL } from "../e2e/env";
 
 const env = { ...process.env, ...e2eEnv };
 const npx = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -44,6 +44,7 @@ async function ensureQueue() {
 async function main() {
   await ensureQueue();
   for (const suffix of ["", "-wal", "-shm"]) rmSync(`data/e2e.db${suffix}`, { force: true });
+  rmSync(EMAIL_OUTBOX_FILE, { force: true });
   run(npx, ["tsx", "scripts/migrate.ts"]);
   if (!process.env.E2E_SKIP_BUILD) run(npx, ["next", "build"]);
   const server = spawn(npx, ["next", "start", "-p", String(E2E_PORT), "-H", "0.0.0.0"], {

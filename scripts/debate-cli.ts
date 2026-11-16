@@ -128,6 +128,10 @@ async function main() {
     } else if (outcome.kind === "failed") {
       console.log(`\n   Debate failed: ${outcome.error}`);
       break;
+    } else if (outcome.kind === "silenced") {
+      console.log(`\n   ${outcome.speaker} can't speak any more: ${outcome.reason}.`);
+    } else if (outcome.kind === "completed") {
+      break;
     } else {
       await sleep(500);
     }

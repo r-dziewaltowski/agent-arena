@@ -4,8 +4,10 @@
  * is set, e.g. when CI built it in an earlier step) and serves the build on port 3100.
  */
 import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
-import { E2E_PORT, EMAIL_OUTBOX_FILE, e2eEnv, QSTASH_DEV_URL } from "../e2e/env";
+import { createServer } from "node:http";
+import { E2E_PORT, EMAIL_OUTBOX_FILE, e2eEnv, FAKE_OPENROUTER_PORT, QSTASH_DEV_URL } from "../e2e/env";
 
 const env = { ...process.env, ...e2eEnv };
 const npx = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -41,8 +43,30 @@ async function ensureQueue() {
   if (!(await queueReachable())) throw new Error("The QStash dev server didn't start.");
 }
 
+/**
+ * A fake OpenRouter for the connect flow: /auth approves straight away (back to the app's callback
+ * with a code), and the key exchange hands out a made-up key. Model calls never reach it: the
+ * fake model answers turns.
+ */
+function startFakeOpenRouter() {
+  createServer((req, res) => {
+    const url = new URL(req.url ?? "/", `http://localhost:${FAKE_OPENROUTER_PORT}`);
+    if (req.method === "GET" && url.pathname === "/auth") {
+      const back = new URL(url.searchParams.get("callback_url") ?? "");
+      back.searchParams.set("code", randomUUID());
+      back.searchParams.set("state", url.searchParams.get("state") ?? "");
+      res.writeHead(302, { location: back.toString() }).end();
+    } else if (req.method === "POST" && url.pathname === "/api/v1/auth/keys") {
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ key: `sk-or-fake-${randomUUID()}` }));
+    } else {
+      res.writeHead(404).end();
+    }
+  }).listen(FAKE_OPENROUTER_PORT);
+}
+
 async function main() {
   await ensureQueue();
+  startFakeOpenRouter();
   for (const suffix of ["", "-wal", "-shm"]) rmSync(`data/e2e.db${suffix}`, { force: true });
   rmSync(EMAIL_OUTBOX_FILE, { force: true });
   run(npx, ["tsx", "scripts/migrate.ts"]);

@@ -3,12 +3,15 @@ import { streamText } from "ai";
 import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 import {
   callSettings,
+  freeSummaryModel,
   resolveModel as defaultResolveModel,
   type ModelResolver,
   type Provider,
 } from "../ai/provider";
 import type { Db } from "../db/client";
 import { debateParticipants, debates, turns } from "../db/schema";
+import { keyRefusalReason, loadKey, markKeyFailed, markKeyUsed, NOT_CONNECTED_REASON } from "../openrouter";
+import type { Creativity } from "./traits";
 import { publishChunk } from "./broadcast";
 import { votingClosesAtFor } from "./lifecycle";
 import { buildPrompt, cleanTurnText, trimToLastSentence, turnKindFor, type Speaker } from "./prompt";
@@ -29,6 +32,10 @@ const MAX_RETRY_AFTER_MS = 24 * 60 * 60_000;
 export type StepOutcome =
   | { kind: "skipped" }
   | { kind: "turn"; turnId: string; seq: number; speaker: string; text: string; debateCompleted: boolean }
+  /** The speaker's owner's paid-model key stopped working: that agent is skipped from now on. */
+  | { kind: "silenced"; speaker: string; reason: string }
+  /** Only silenced agents were left to speak, so the debate ended. */
+  | { kind: "completed" }
   | { kind: "waiting"; error: string; nextAttemptAt: number }
   | { kind: "retrying"; error: string; retryCount: number }
   | { kind: "failed"; error: string };
@@ -98,8 +105,54 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       await db.update(debates).set({ currentRound: round, currentTurnIndex: turnIndex }).where(eq(debates.id, debateId));
     }
 
+    // Agents whose owner's paid-model key stopped working are skipped; the debate carries on.
+    if (participants.length > 0 && participants.every((p) => p.silencedAt !== null)) {
+      const error = `No agent can speak any more: ${participants[0].silencedReason ?? "their owners' keys stopped working"}.`;
+      await db
+        .update(debates)
+        .set({ status: "failed", errorMessage: error, waitingReason: null, nextAttemptAt: null })
+        .where(eq(debates.id, debateId));
+      return { kind: "failed", error };
+    }
+    if (participants[turnIndex]?.silencedAt) {
+      while (participants[turnIndex]?.silencedAt && round <= debate.rounds) {
+        turnIndex++;
+        if (turnIndex >= participants.length) {
+          turnIndex = 0;
+          round++;
+        }
+      }
+      if (round > debate.rounds) {
+        const finishedAt = now();
+        await db
+          .update(debates)
+          .set({
+            status: "completed",
+            currentRound: debate.rounds,
+            currentTurnIndex: 0,
+            completedAt: finishedAt,
+            votingClosesAt: votingClosesAtFor(finishedAt, debate.votingDuration),
+            retryCount: 0,
+            waitAttempts: 0,
+            nextAttemptAt: null,
+            waitingReason: null,
+          })
+          .where(eq(debates.id, debateId));
+        return { kind: "completed" };
+      }
+      await db.update(debates).set({ currentRound: round, currentTurnIndex: turnIndex }).where(eq(debates.id, debateId));
+    }
+
     const speakerRow = participants[turnIndex];
     if (!speakerRow) throw new Error(`No participant at index ${turnIndex}.`);
+    const provider = speakerRow.provider as Provider;
+
+    // Paid models run on the owner's own OpenRouter key, looked up at call time.
+    let apiKey: string | undefined;
+    if (provider === "openrouter") {
+      apiKey = (await loadKey(db, speakerRow.userId)) ?? undefined;
+      if (!apiKey) return silence(db, speakerRow, NOT_CONNECTED_REASON, now());
+    }
     const speakers: Speaker[] = participants.map(toSpeaker);
     const speaker = speakers[turnIndex];
     const kind = turnKindFor(round, debate.rounds);
@@ -144,8 +197,7 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
     let finishReason: string | undefined;
     const started = now();
     try {
-      const provider = speakerRow.provider as Provider;
-      const model = resolve(provider, speakerRow.modelId ?? "");
+      const model = resolve(provider, speakerRow.modelId ?? "", { apiKey });
       const result = streamText({
         model,
         system: prompt.system,
@@ -195,6 +247,22 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
           ? "The model's safety filter blocked the turn."
           : "The model returned an empty turn.";
 
+      const refusal = provider === "openrouter" && streamError ? keyRefusalReason(streamError, now()) : null;
+      if (refusal) {
+        await markKeyFailed(db, speakerRow.userId, refusal, now());
+        return silence(db, speakerRow, refusal, now());
+      }
+
+      // The app's own free models (Groq, Google) share one daily limit across all users. Once it's
+      // used up for the day, skip this agent so agents on other quotas (e.g. paid ones) carry on;
+      // if nobody else could speak, wait for the reset as before.
+      if (streamError && isAppProvided(provider) && sharedDailyLimitReached(streamError, now())) {
+        const othersCanSpeak = participants.some(
+          (p) => p.id !== speakerRow.id && !p.silencedAt && quotaKey(p) !== quotaKey(speakerRow),
+        );
+        if (othersCanSpeak) return silence(db, speakerRow, `Agent Arena's free ${APP_PROVIDER_NAMES[provider]} limit is used up for today`, now());
+      }
+
       if (streamError && isModelUnreachable(streamError)) {
         const attempts = debate.waitAttempts + 1;
         const limited = isRateLimited(streamError);
@@ -225,12 +293,16 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
     // Save the turn and advance.
     const promptTokens = usage?.inputTokens ?? estimateTokens(prompt.system + JSON.stringify(prompt.messages));
     const completionTokens = usage?.outputTokens ?? estimateTokens(cleaned);
-    let nextIndex = turnIndex + 1;
+    // The next speaker, skipping silenced agents, so a debate ends as soon as nobody else can speak.
+    let nextIndex = turnIndex;
     let nextRound = round;
-    if (nextIndex >= participants.length) {
-      nextIndex = 0;
-      nextRound = round + 1;
-    }
+    do {
+      nextIndex++;
+      if (nextIndex >= participants.length) {
+        nextIndex = 0;
+        nextRound++;
+      }
+    } while (participants[nextIndex]?.silencedAt && nextRound <= debate.rounds);
     const completed = nextRound > debate.rounds;
     const finishedAt = now();
 
@@ -269,13 +341,13 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
         .where(and(eq(debates.id, debateId), eq(debates.lockToken, lockToken)));
     });
 
-    // Long debates: fold older turns into the rolling summary (still holding the lock).
-    if (!completed) {
-      await maybeFoldSummary(db, debateId, {
-        resolveModel: resolve,
-        provider: speakerRow.provider as Provider,
-        modelId: speakerRow.modelId ?? "",
-      });
+    if (provider === "openrouter") await markKeyUsed(db, speakerRow.userId, now());
+
+    // Long debates: fold older turns into the rolling summary (still holding the lock). The summary
+    // serves everyone, so it never runs on one owner's paid key: a free model writes it instead.
+    const summarizer = provider === "openrouter" ? freeSummaryModel() : { provider, modelId: speakerRow.modelId ?? "" };
+    if (!completed && summarizer) {
+      await maybeFoldSummary(db, debateId, { resolveModel: resolve, ...summarizer });
     }
 
     return { kind: "turn", turnId: turnId!, seq, speaker: speaker.name, text: cleaned, debateCompleted: completed };
@@ -295,7 +367,42 @@ function toSpeaker(p: typeof debateParticipants.$inferSelect): Speaker {
     style: p.style ?? "analytical",
     tone: p.tone ?? "formal",
     stance: p.stance ?? "neutral",
+    // A model that takes no temperature gets its Creativity in words instead.
+    creativityInPrompt: p.temperature === null && p.creativity ? (p.creativity as Creativity) : undefined,
   };
+}
+
+/** Providers whose free quota belongs to the app and is shared by every user. */
+const APP_PROVIDER_NAMES: Partial<Record<Provider, string>> = { groq: "Groq", google: "Google" };
+
+function isAppProvided(provider: Provider): boolean {
+  return provider in APP_PROVIDER_NAMES;
+}
+
+/** A retry-after this far away is a daily limit, not a per-minute one. */
+const DAILY_LIMIT_THRESHOLD_MS = 10 * 60_000;
+
+export function sharedDailyLimitReached(err: unknown, now = Date.now()): boolean {
+  return isRateLimited(err) && (retryAfterMs(err, now) ?? 0) > DAILY_LIMIT_THRESHOLD_MS;
+}
+
+/**
+ * Which quota a participant's turns count against: the app's free models have a limit per model;
+ * OpenRouter models use their owner's own account.
+ */
+function quotaKey(p: typeof debateParticipants.$inferSelect): string {
+  return p.provider === "openrouter" ? `openrouter:${p.userId}` : `${p.provider}:${p.modelId}`;
+}
+
+/** Marks the participant as unable to speak; the next step skips it. */
+async function silence(
+  db: Db,
+  participant: typeof debateParticipants.$inferSelect,
+  reason: string,
+  at: number,
+): Promise<StepOutcome> {
+  await db.update(debateParticipants).set({ silencedAt: at, silencedReason: reason }).where(eq(debateParticipants.id, participant.id));
+  return { kind: "silenced", speaker: participant.name ?? "Unknown", reason };
 }
 
 function estimateTokens(text: string): number {

@@ -9,6 +9,8 @@ export const E2E_BASE_URL = `http://localhost:${E2E_PORT}`;
 export const QSTASH_DEV_URL = "http://127.0.0.1:8080";
 /** Emails the app "sends" during the tests land here, one JSON object per line. */
 export const EMAIL_OUTBOX_FILE = "data/e2e-outbox.jsonl";
+/** A fake OpenRouter (started by scripts/e2e-server.ts) that approves every connect request. */
+export const FAKE_OPENROUTER_PORT = 3101;
 
 export const e2eEnv: Record<string, string> = {
   NODE_ENV: "production",
@@ -37,4 +39,7 @@ export const e2eEnv: Record<string, string> = {
   GMAIL_USER: "",
   GMAIL_APP_PASSWORD: "",
   EMAIL_OUTBOX_FILE,
+  // Paid models: the fake OpenRouter hands out keys; this secret only encrypts them in the test database.
+  OPENROUTER_URL: `http://localhost:${FAKE_OPENROUTER_PORT}`,
+  USER_API_KEYS_ENCRYPTION_SECRET: "ZTJlLXRlc3Qtb25seS1lbmNyeXB0aW9uLXNlY3JldCE=",
 };

@@ -1,12 +1,13 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createGroq } from "@ai-sdk/groq";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import type { Creativity, TurnLength } from "../debate/traits";
 import { fakeModel, fakeModelsEnabled } from "./fake-model";
 import { findModel } from "./models";
 
-export type Provider = "ollama" | "groq" | "google" | "anthropic";
+export type Provider = "ollama" | "groq" | "google" | "openrouter" | "anthropic";
 
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434/api";
 export const DEFAULT_OLLAMA_MODEL = "llama3.2";
@@ -14,6 +15,8 @@ export const DEFAULT_OLLAMA_MODEL = "llama3.2";
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 /** Google's free tier (Gemini API key from AI Studio, billing never enabled), likewise never billed. */
 export const DEFAULT_GOOGLE_MODEL = "gemini-3.5-flash-lite";
+/** Paid models run on the agent owner's own OpenRouter account (M5); this is the cheap default. */
+export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-haiku-5.5";
 
 /** Google's key, under the name its SDK reads by default. */
 export function googleApiKey(): string | undefined {
@@ -53,8 +56,19 @@ const TEMPERATURES: Record<Provider, Record<Creativity, number>> = {
   ollama: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
   groq: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
   google: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
+  openrouter: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
   anthropic: { focused: 0.2, balanced: 0.6, creative: 0.8, wild: 1.0 },
 };
+
+/**
+ * A free model for work that serves the whole debate (the rolling summary), so it never runs on
+ * one owner's paid key: Groq's default when configured, else Google's; null when neither is.
+ */
+export function freeSummaryModel(): { provider: Provider; modelId: string } | null {
+  if (process.env.GROQ_API_KEY) return { provider: "groq", modelId: defaultModelFor("groq") };
+  if (googleApiKey()) return { provider: "google", modelId: defaultModelFor("google") };
+  return null;
+}
 
 /** The default model for a provider, overridable per environment. */
 export function defaultModelFor(provider: Provider): string {
@@ -65,6 +79,8 @@ export function defaultModelFor(provider: Provider): string {
       return process.env.GROQ_DEFAULT_MODEL ?? DEFAULT_GROQ_MODEL;
     case "google":
       return process.env.GOOGLE_DEFAULT_MODEL ?? DEFAULT_GOOGLE_MODEL;
+    case "openrouter":
+      return DEFAULT_OPENROUTER_MODEL;
     case "anthropic":
       return "claude-haiku-5-5";
   }
@@ -72,14 +88,19 @@ export function defaultModelFor(provider: Provider): string {
 
 const MAX_OUTPUT_TOKENS: Record<TurnLength, number> = { short: 120, medium: 220, long: 400 };
 
-/** Turns an agent's labels into the numbers sent to the model, for its provider. */
+/**
+ * Turns an agent's labels into the numbers sent to the model, for its provider. Models that reject
+ * a temperature get none (null): their Creativity is described in the prompt instead.
+ */
 export function resolveSettings(
   provider: Provider,
   creativity: Creativity,
   turnLength: TurnLength,
-): { temperature: number; maxOutputTokens: number } {
+  modelId?: string,
+): { temperature: number | null; maxOutputTokens: number } {
+  const takesTemperature = modelId === undefined || findModel(provider, modelId)?.supportsTemperature !== false;
   return {
-    temperature: TEMPERATURES[provider][creativity],
+    temperature: takesTemperature ? TEMPERATURES[provider][creativity] : null,
     maxOutputTokens: MAX_OUTPUT_TOKENS[turnLength],
   };
 }
@@ -92,13 +113,15 @@ type CallSettings = {
     ollama?: { options: { temperature?: number; num_predict?: number; stop?: string[] } };
     groq?: { reasoningEffort: "none" | "low"; reasoningFormat: "hidden" };
     google?: { thinkingConfig: { thinkingLevel: "minimal" | "low" } };
+    openrouter?: { reasoning: { effort: "none" | "minimal" | "low"; exclude: true } };
   };
 };
 
 /**
  * Generation settings in the form each provider honours. Ollama's default API ignores the SDK's
  * generic `stopSequences` and `maxOutputTokens`, so for Ollama they go in its native options.
- * Groq's reasoning models get minimal, hidden reasoning; Gemini models minimal thinking.
+ * Groq's reasoning models get minimal, hidden reasoning; Gemini models minimal thinking. OpenRouter
+ * models get their catalog reasoning level, and no temperature or stop sequences where they reject them.
  */
 export function callSettings(
   provider: Provider,
@@ -121,13 +144,25 @@ export function callSettings(
     const thinking = googleThinkingOptions(modelId);
     return thinking ? { ...generic, providerOptions: { google: thinking } } : generic;
   }
+  if (provider === "openrouter") {
+    const entry = findModel("openrouter", modelId);
+    return {
+      maxOutputTokens: s.maxOutputTokens,
+      ...(entry?.supportsTemperature === false ? {} : { temperature: s.temperature }),
+      ...(entry?.supportsStop === false ? {} : { stopSequences: s.stopSequences }),
+      ...(entry?.openRouterReasoning
+        ? { providerOptions: { openrouter: { reasoning: { effort: entry.openRouterReasoning, exclude: true as const } } } }
+        : {}),
+    };
+  }
   return generic;
 }
 
-export type ModelResolver = (provider: Provider, modelId: string) => LanguageModel;
+/** `apiKey`: the agent owner's own key, for paid providers (OpenRouter). */
+export type ModelResolver = (provider: Provider, modelId: string, opts?: { apiKey?: string }) => LanguageModel;
 
 /** The only place that knows which provider package to use. */
-export const resolveModel: ModelResolver = (provider, modelId) => {
+export const resolveModel: ModelResolver = (provider, modelId, opts) => {
   if (fakeModelsEnabled()) return fakeModel(); // end-to-end tests only
   switch (provider) {
     case "ollama": {
@@ -146,7 +181,11 @@ export const resolveModel: ModelResolver = (provider, modelId) => {
       if (!apiKey) throw new Error("GOOGLE_GENERATIVE_AI_API_KEY is not set, so Google models can't be used.");
       return createGoogleGenerativeAI({ apiKey })(modelId);
     }
+    case "openrouter": {
+      if (!opts?.apiKey) throw new Error("No OpenRouter key: paid models run on the agent owner's own account.");
+      return createOpenRouter({ apiKey: opts.apiKey, headers: { "X-Title": "Agent Arena" } })(modelId);
+    }
     case "anthropic":
-      throw new Error("The Anthropic provider is added in M5.");
+      throw new Error("Direct Anthropic keys aren't supported; Claude runs through OpenRouter.");
   }
 };

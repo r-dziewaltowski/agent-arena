@@ -4,6 +4,8 @@ import { AgentForm } from "@/components/agents/agent-form";
 import { Card, Notice, PageHeader } from "@/components/ui";
 import { getModelOptions, isRetired, modelLabel } from "@/lib/ai/model-options";
 import { requireUser } from "@/lib/auth/session";
+import { getDb } from "@/lib/db/client";
+import { canUsePaidModels } from "@/lib/paid-models";
 import { getAgent, runningDebateCount } from "@/lib/queries";
 
 export default function EditAgentPage(props: PageProps<"/agents/[id]/edit">) {
@@ -21,7 +23,8 @@ async function EditAgent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [me, agent] = await Promise.all([requireUser(`/agents/${id}/edit`), getAgent(id)]);
   if (!agent || agent.ownerId !== me.id) notFound();
-  const [groups, running] = await Promise.all([getModelOptions(), runningDebateCount(agent.id)]);
+  const paid = await canUsePaidModels(await getDb(), me.id);
+  const [groups, running] = await Promise.all([getModelOptions({ paid }), runningDebateCount(agent.id)]);
   return (
     <div className="space-y-4">
       {running > 0 && (
@@ -36,6 +39,7 @@ async function EditAgent({ params }: { params: Promise<{ id: string }> }) {
       <Card>
         <AgentForm
           modelGroups={groups}
+          paidConnected={paid}
           currentModelLabel={modelLabel(agent.provider, agent.modelId)}
           initial={{
             id: agent.id,

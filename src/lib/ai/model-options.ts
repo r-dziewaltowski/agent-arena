@@ -1,26 +1,39 @@
 import { findModel, listOllamaModels, offeredModels, PROVIDER_LABELS } from "./models";
+import { costPerTurnUsd, formatUsd } from "./pricing";
 import { defaultModelFor, googleApiKey, type Provider } from "./provider";
 
 export type ModelOption = { provider: Provider; id: string; name: string; description: string };
 export type ModelGroup = { provider: Provider; label: string; models: ModelOption[] };
 
-function catalogGroup(provider: Provider): ModelGroup {
+/** OpenRouter's models come in two groups: free (the owner's daily free requests) and paid. */
+const OPENROUTER_FREE_LABEL = "Free, on your OpenRouter account (your own daily limit)";
+
+function catalogGroup(provider: Provider, tier?: "free" | "paid"): ModelGroup {
   return {
     provider,
-    label: PROVIDER_LABELS[provider],
-    models: offeredModels(provider).map(({ provider, id, name, description }) => ({ provider, id, name, description })),
+    label: tier === "free" ? OPENROUTER_FREE_LABEL : PROVIDER_LABELS[provider],
+    models: offeredModels(provider)
+      .filter((m) => !tier || m.tier === tier)
+      .map(({ provider, id, name, description, price }) => ({
+        provider,
+        id,
+        name,
+        // Paid models say roughly what a medium-length turn costs their owner.
+        description: price ? `${description} About ${formatUsd(costPerTurnUsd(price))} a turn.` : description,
+      })),
   };
 }
 
 /**
  * The models the agent form can offer right now: Groq's and Google's offered catalog models when
- * their keys are set, and the models installed in Ollama when it can be reached. Paid models
- * arrive in M5.
+ * their keys are set, the models installed in Ollama when it can be reached, and OpenRouter's free
+ * and paid models when this user has connected their OpenRouter account.
  */
-export async function getModelOptions(): Promise<ModelGroup[]> {
+export async function getModelOptions(opts: { paid?: boolean } = {}): Promise<ModelGroup[]> {
   const groups: ModelGroup[] = [];
   if (process.env.GROQ_API_KEY) groups.push(catalogGroup("groq"));
   if (googleApiKey()) groups.push(catalogGroup("google"));
+  if (opts.paid) groups.push(catalogGroup("openrouter", "free"), catalogGroup("openrouter", "paid"));
   const installed = await listOllamaModels();
   if (installed && installed.length > 0) {
     groups.push({

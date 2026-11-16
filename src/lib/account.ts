@@ -9,7 +9,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import type { Db } from "./db/client";
-import { account, agents, debates, session, user, verification } from "./db/schema";
+import { account, agents, debates, providerConnections, session, user, verification } from "./db/schema";
 import { deleteAgent, deleteDebate } from "./debate/lifecycle";
 
 export const DELETED_USER_NAME = "Deleted user";
@@ -35,6 +35,7 @@ export async function deleteAccount(db: Db, userId: string, now = Date.now()): P
   await db.transaction(async (tx) => {
     await tx.delete(session).where(eq(session.userId, userId));
     await tx.delete(account).where(eq(account.userId, userId));
+    await tx.delete(providerConnections).where(eq(providerConnections.userId, userId)); // stored OpenRouter key
     await tx.delete(verification).where(eq(verification.identifier, person.email));
     await tx
       .update(user)

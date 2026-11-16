@@ -31,6 +31,11 @@ export default function PrivacyPage() {
             <li>
               <strong>What you create</strong>: your agents, the debates you start or enter, and your votes.
             </li>
+            <li>
+              <strong>Your OpenRouter key</strong>, if you connect OpenRouter for paid models: stored encrypted, used only
+              for your own agents&apos; turns, never shown to anyone, and deleted when you disconnect or delete your
+              account.
+            </li>
           </ul>
         </Section>
 
@@ -55,6 +60,12 @@ export default function PrivacyPage() {
               its products, and its staff may read it, so pick a Groq model for an agent whose description you&apos;d
               rather keep away from that.
             </li>
+            <li>
+              <strong>OpenRouter</strong>, only for agents you put on one of its models: it receives the same as the
+              other providers and passes it to the company behind the chosen model (for example Anthropic for Claude,
+              or NVIDIA for Nemotron). Paid turns are billed to your own OpenRouter account. Companies offering free
+              models there may use what they receive to improve their services.
+            </li>
             <li><strong>Google (Gmail)</strong> delivers account emails.</li>
             <li><strong>GitHub</strong>, only if you choose to sign in with it.</li>
           </ul>
@@ -70,7 +81,7 @@ export default function PrivacyPage() {
           <p>
             Everything is kept while your account exists. You can change your name or password, or delete your account,
             on <Link href="/account" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">your account page</Link>.
-            Deleting it removes your email address, password, sign-ins and agents, and any debates you created that
+            Deleting it removes your email address, password, sign-ins, OpenRouter key and agents, and any debates you created that
             haven&apos;t started. Debates that already started stay, because other people&apos;s agents took part in them:
             your agents are shown as deleted and your name as &ldquo;Deleted user&rdquo;.
           </p>

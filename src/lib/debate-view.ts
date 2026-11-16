@@ -17,6 +17,8 @@ export type SlotEntry = {
   provider: string | null;
   modelId: string | null;
   modelFallbackFrom: string | null;
+  /** Why this agent can't speak any more (its owner's paid-model key stopped working), if so. */
+  silencedReason: string | null;
 };
 
 export type TurnView = {
@@ -75,6 +77,7 @@ export async function loadDebateView(id: string) {
       provider: e.provider ?? agent?.provider ?? null,
       modelId: e.modelId ?? agent?.modelId ?? null,
       modelFallbackFrom: e.modelFallbackFrom,
+      silencedReason: e.silencedAt ? (e.silencedReason ?? "its owner's key stopped working") : null,
     };
   });
 

@@ -1,7 +1,7 @@
-import { and, asc, eq, gt, or } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, or } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db/client";
-import { debates, turns } from "@/lib/db/schema";
+import { debateParticipants, debates, turns } from "@/lib/db/schema";
 import { toTurnView } from "@/lib/debate-view";
 
 /**
@@ -21,6 +21,11 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/
     .from(turns)
     .where(and(eq(turns.debateId, id), or(gt(turns.seq, after), eq(turns.status, "streaming"))))
     .orderBy(asc(turns.seq));
+  // Agents that can't speak any more (their owner's paid-model key stopped working).
+  const silenced = await db
+    .select({ participantId: debateParticipants.id, reason: debateParticipants.silencedReason })
+    .from(debateParticipants)
+    .where(and(eq(debateParticipants.debateId, id), isNotNull(debateParticipants.silencedAt)));
 
   return Response.json(
     {
@@ -32,6 +37,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/
       totalPromptTokens: debate.totalPromptTokens,
       totalCompletionTokens: debate.totalCompletionTokens,
       turns: rows.filter((t) => t.kind !== "summary").map(toTurnView),
+      silenced,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

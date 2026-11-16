@@ -139,3 +139,14 @@ export function toneSentence(tone: string): string {
 export function stanceOf(stance: string): (typeof STANCE_PRESETS)[Stance] {
   return isStance(stance) ? STANCE_PRESETS[stance] : STANCE_PRESETS.neutral;
 }
+
+/**
+ * Creativity as a prompt instruction, for models that reject a temperature (current Claude, GPT-5.6
+ * Luna): the closest they get to the same dial. "Balanced" is the models' natural style.
+ */
+export const CREATIVITY_SENTENCES: Record<Creativity, string | null> = {
+  focused: "Stay tightly on point and be consistent: no tangents or flourishes.",
+  balanced: null,
+  creative: "Be inventive: reach for fresh angles, vivid examples and bold phrasing.",
+  wild: "Be daring and unpredictable: surprising arguments, colourful language, unexpected turns.",
+};

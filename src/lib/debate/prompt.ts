@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai";
-import { stanceOf, styleSentence, toneSentence } from "./traits";
+import { CREATIVITY_SENTENCES, stanceOf, styleSentence, toneSentence, type Creativity } from "./traits";
 
 export type TurnKind = "opening" | "argument" | "closing";
 
@@ -10,6 +10,8 @@ export type Speaker = {
   style: string;
   tone: string;
   stance: string;
+  /** Set only for models that take no temperature: Creativity is then asked for in words. */
+  creativityInPrompt?: Creativity;
 };
 
 export type PriorTurn = { participantId: string | null; content: string };
@@ -57,7 +59,14 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
   const system = [
     `You are ${speaker.name}, taking part in a live debate.`,
     `Who you are: ${speaker.persona.trim()}`,
-    [styleSentence(speaker.style), toneSentence(speaker.tone), stanceOf(speaker.stance).description].join(" "),
+    [
+      styleSentence(speaker.style),
+      toneSentence(speaker.tone),
+      stanceOf(speaker.stance).description,
+      speaker.creativityInPrompt ? CREATIVITY_SENTENCES[speaker.creativityInPrompt] : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
     `The topic: ${input.topic.trim()}`,
     `The other participants: ${others.map((o) => o.name).join(", ")}.`,
     [

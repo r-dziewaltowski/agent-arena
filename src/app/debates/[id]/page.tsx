@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { priceOf } from "@/lib/ai/pricing";
 import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { deleteDebateAction, withdrawAction } from "@/actions/debates";
@@ -79,7 +80,12 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                 key={debate.status}
                 debateId={debate.id}
                 rounds={debate.rounds}
-                speakers={slots.map((s) => ({ participantId: s.participantId, name: s.name, position: s.position }))}
+                speakers={slots.map((s) => ({
+                  participantId: s.participantId,
+                  name: s.name,
+                  position: s.position,
+                  price: priceOf(s.provider, s.modelId),
+                }))}
                 initialTurns={turns}
                 initial={{
                   status: debate.status,
@@ -87,6 +93,9 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                   nextAttemptAt: debate.nextAttemptAt,
                   totalPromptTokens: debate.totalPromptTokens,
                   totalCompletionTokens: debate.totalCompletionTokens,
+                  silenced: slots
+                    .filter((s) => s.silencedReason)
+                    .map((s) => ({ participantId: s.participantId, reason: s.silencedReason })),
                 }}
               />
             )}
@@ -137,6 +146,12 @@ function Participants({ slots }: { slots: SlotEntry[] }) {
               <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
                 Ran on {modelLabel(s.provider, s.modelId ?? "")}: its chosen model ({modelLabel(s.provider, s.modelFallbackFrom)}) has been retired.
               </p>
+            )}
+            {priceOf(s.provider, s.modelId) && (
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Paid model, billed to its owner&apos;s OpenRouter account.</p>
+            )}
+            {s.silencedReason && (
+              <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">Can&apos;t speak any more: {s.silencedReason}.</p>
             )}
           </li>
         ))}

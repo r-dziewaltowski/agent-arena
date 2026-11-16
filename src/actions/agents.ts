@@ -13,6 +13,7 @@ import { deleteAgent, isUniqueViolation, LifecycleError } from "@/lib/debate/lif
 import { agentSchema } from "@/lib/validation/agent";
 import { submittedTrait } from "@/lib/debate/traits";
 import { pickValues, type FormValues } from "@/lib/form-values";
+import { canUsePaidModels } from "@/lib/paid-models";
 import { z } from "zod";
 
 export type AgentFormState = {
@@ -62,7 +63,7 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
   const v = parsed.data;
 
   // Only models the form can currently offer may be saved, except an unchanged existing choice.
-  const options = await getModelOptions();
+  const options = await getModelOptions({ paid: await canUsePaidModels(db, me.id) });
   const offered = options.some((g) => g.models.some((m) => m.provider === v.provider && m.id === v.modelId));
   let existing: typeof agents.$inferSelect | undefined;
   if (agentId) {

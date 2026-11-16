@@ -3,10 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Notice, cx } from "@/components/ui";
+import { costUsd, formatUsd, type Price } from "@/lib/ai/pricing";
 import type { TurnView } from "@/lib/debate-view";
 import { Countdown } from "./countdown";
 
-type Speaker = { participantId: string; name: string; position: number };
+/** `price`: set for agents on paid models, billed to their owner's OpenRouter account. */
+type Speaker = { participantId: string; name: string; position: number; price: Price | null };
+type Silenced = { participantId: string; reason: string | null };
 
 type LiveState = {
   status: string;
@@ -14,6 +17,7 @@ type LiveState = {
   nextAttemptAt: number | null;
   totalPromptTokens: number;
   totalCompletionTokens: number;
+  silenced: Silenced[];
 };
 
 const SPEAKER_COLORS = [
@@ -79,6 +83,7 @@ export function LiveDebate({
             nextAttemptAt: data.nextAttemptAt,
             totalPromptTokens: data.totalPromptTokens,
             totalCompletionTokens: data.totalCompletionTokens,
+            silenced: data.silenced,
           });
           // Finished or failed: reload the page around the transcript (status, voting, etc.).
           if (data.status !== "running") router.refresh();
@@ -140,9 +145,29 @@ export function LiveDebate({
         </section>
       ))}
 
+      {state.silenced.map((x) => (
+        <Notice key={x.participantId} tone="amber">
+          {speakerById.get(x.participantId)?.name ?? "An agent"} can&apos;t speak any more: {x.reason ?? "its owner's key stopped working"}.
+          Its remaining turns are skipped.
+        </Notice>
+      ))}
+
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        {(state.totalPromptTokens + state.totalCompletionTokens).toLocaleString()} tokens used · Free
+        {(state.totalPromptTokens + state.totalCompletionTokens).toLocaleString()} tokens used · {costLine(speakers, turns)}
       </p>
     </div>
   );
+}
+
+/** "Free", or what each paid agent cost its owner so far (list price, on their OpenRouter account). */
+function costLine(speakers: Speaker[], turns: TurnView[]): string {
+  const paid = speakers.filter((sp) => sp.price);
+  if (paid.length === 0) return "Free";
+  const costs = paid.map((sp) => {
+    const own = turns.filter((t) => t.participantId === sp.participantId && t.status === "complete");
+    const usd = own.reduce((sum, t) => sum + costUsd(sp.price!, t.promptTokens ?? 0, t.completionTokens ?? 0), 0);
+    return `${sp.name} ${formatUsd(usd)}`;
+  });
+  const free = speakers.length > paid.length ? "; the rest free" : "";
+  return `${costs.join(", ")} on its owner's OpenRouter account${free}`;
 }

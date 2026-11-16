@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTestDb, seedAgent, seedUser } from "../test/helpers";
 import { deleteAccount, deletedEmail, DELETED_USER_NAME } from "./account";
 import type { Db } from "./db/client";
-import { account, agents, debateParticipants, debates, session, user, votes } from "./db/schema";
+import { account, agents, debateParticipants, debates, providerConnections, session, user, votes } from "./db/schema";
 import { castVote, createDebate, enter, startDebate } from "./debate/lifecycle";
 
 let db: Db;
@@ -31,8 +31,10 @@ describe("deleteAccount", () => {
   it("removes personal data and logins but keeps the anonymised row", async () => {
     await db.insert(session).values({ id: "s1", token: "t1", userId: "alice", expiresAt: new Date(NOW + 1e9), createdAt: new Date(NOW), updatedAt: new Date(NOW) });
     await db.insert(account).values({ id: "a1", accountId: "alice", providerId: "credential", userId: "alice", password: "hash", createdAt: new Date(NOW), updatedAt: new Date(NOW) });
+    await db.insert(providerConnections).values({ id: "c1", userId: "alice", provider: "openrouter", encryptedKey: "v1:x:y:z", keyHash: "h", createdAt: NOW });
 
     await deleteAccount(db, "alice", NOW);
+    expect(await db.select().from(providerConnections)).toEqual([]); // the stored OpenRouter key is gone
 
     const [row] = await db.select().from(user).where(eq(user.id, "alice"));
     expect(row).toMatchObject({ displayName: DELETED_USER_NAME, name: DELETED_USER_NAME, email: deletedEmail("alice"), isAdmin: false, deletedAt: NOW });

@@ -16,6 +16,14 @@ export type ModelEntry = {
   reasoning?: { effort: "none" | "low"; format: "hidden" };
   /** Google's equivalent: how much a Gemini model thinks first (Gemma doesn't). */
   thinkingLevel?: "minimal" | "low";
+  /** OpenRouter's equivalent, passed through to the model's company; reasoning text is never kept. */
+  openRouterReasoning?: "none" | "minimal" | "low";
+  /** List price in USD per million tokens (paid models), from OpenRouter's model list. */
+  price?: { input: number; output: number };
+  /** False for models that reject a temperature (current Claude): Creativity goes in the prompt. */
+  supportsTemperature?: boolean;
+  /** False for models that reject stop sequences; the prompt rule and name stripping cover it. */
+  supportsStop?: boolean;
   /** False once a model is retired: hidden from the picker, replaced at debate start. */
   offered: boolean;
   isDefault?: boolean;
@@ -72,12 +80,114 @@ export const MODEL_CATALOG: ModelEntry[] = [
     offered: true,
     isDefault: true,
   },
+  // Free models on the agent owner's own OpenRouter account: its free daily requests, no credit
+  // needed. Picked 2026-11-16 by measuring (npm run models:openrouter): both answered every request
+  // with reasoning "none"; at "minimal" Super spent the whole cap thinking. Gemma 4, ERNIE 5.5 and
+  // Ling 3.2 were refused for lack of free capacity. OpenRouter's free list changes often: retest.
+  {
+    provider: "openrouter",
+    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    name: "Nemotron 3 Ultra",
+    description: "NVIDIA's largest open model. Confident, well-built arguments.",
+    tier: "free",
+    supportsStop: false,
+    openRouterReasoning: "none",
+    offered: true,
+  },
+  {
+    provider: "openrouter",
+    id: "nvidia/nemotron-3.5-super-vl:free",
+    name: "Nemotron 3.5 Super",
+    description: "NVIDIA's mid-size model. Quick and direct.",
+    tier: "free",
+    supportsStop: false,
+    openRouterReasoning: "none",
+    offered: true,
+  },
+  // Paid models, on the agent owner's own OpenRouter account (M5). Prices: OpenRouter, 2026-11-16.
+  {
+    provider: "openrouter",
+    id: "anthropic/claude-haiku-5.5",
+    name: "Claude Haiku 5.5",
+    description: "Anthropic's quick Claude. Sharp and cheap.",
+    tier: "paid",
+    price: { input: 0.1, output: 0.5 },
+    supportsTemperature: false,
+    openRouterReasoning: "low",
+    offered: true,
+    isDefault: true,
+  },
+  {
+    provider: "openrouter",
+    id: "anthropic/claude-sonnet-5.5",
+    name: "Claude Sonnet 5.5",
+    description: "Anthropic's all-rounder. Nuanced, persuasive arguments.",
+    tier: "paid",
+    price: { input: 2, output: 10 },
+    supportsTemperature: false,
+    openRouterReasoning: "low",
+    offered: true,
+  },
+  {
+    provider: "openrouter",
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    description: "Anthropic's most capable Claude for debates. The priciest here.",
+    tier: "paid",
+    price: { input: 4, output: 20 },
+    supportsTemperature: false,
+    openRouterReasoning: "low",
+    offered: true,
+  },
+  {
+    provider: "openrouter",
+    id: "openai/gpt-5.6-luna",
+    name: "GPT-5.6 Luna",
+    description: "OpenAI's light GPT. Fast and inexpensive.",
+    tier: "paid",
+    price: { input: 0.2, output: 1.2 },
+    supportsTemperature: false,
+    supportsStop: false,
+    openRouterReasoning: "minimal",
+    offered: true,
+  },
+  {
+    provider: "openrouter",
+    id: "google/gemini-3.8-flash",
+    name: "Gemini 3.8 Flash",
+    description: "Google's full-size Flash. Quick and well-informed.",
+    tier: "paid",
+    price: { input: 0.83, output: 4.13 },
+    openRouterReasoning: "minimal",
+    offered: true,
+  },
+  {
+    provider: "openrouter",
+    id: "deepseek/deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    description: "DeepSeek's fast model. Very cheap.",
+    tier: "paid",
+    price: { input: 0.14, output: 0.42 },
+    openRouterReasoning: "none",
+    offered: true,
+  },
+  {
+    provider: "openrouter",
+    id: "mistralai/mistral-large-4-0",
+    name: "Mistral Large 4",
+    description: "Mistral's flagship, from Europe. Measured and precise.",
+    tier: "paid",
+    price: { input: 0.7, output: 2.1 },
+    openRouterReasoning: "none",
+    offered: true,
+  },
 ];
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
   ollama: "Ollama (local)",
-  groq: "Groq (free tier)",
-  google: "Google (free tier)",
+  groq: "Free from Agent Arena: Groq (shared daily limit)",
+  google: "Free from Agent Arena: Google (shared daily limit)",
+  openrouter: "Paid, on your OpenRouter account",
   anthropic: "Anthropic (your key)",
 };
 

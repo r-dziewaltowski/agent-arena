@@ -238,7 +238,7 @@ export async function startInTx(
     // A retired model never blocks a debate: the provider's default runs instead, and says so.
     const available = availability.isAvailable(provider, agent.modelId);
     const modelId = available ? agent.modelId : defaultModelFor(provider);
-    const settings = resolveSettings(provider, agent.creativity as Creativity, agent.turnLength as TurnLength);
+    const settings = resolveSettings(provider, agent.creativity as Creativity, agent.turnLength as TurnLength, modelId);
     maxOutputs.push(settings.maxOutputTokens);
     await tx
       .update(debateParticipants)

@@ -17,7 +17,7 @@ export const agents = sqliteTable(
     tone: text("tone").notNull(),
     /** A stance preset key from traits.ts. Plain text so custom values can be added later. */
     stance: text("stance").notNull(),
-    provider: text("provider", { enum: ["ollama", "groq", "google", "anthropic"] }).notNull(),
+    provider: text("provider", { enum: ["ollama", "groq", "google", "openrouter", "anthropic"] }).notNull(),
     modelId: text("model_id").notNull(),
     creativity: text("creativity", { enum: ["focused", "balanced", "creative", "wild"] })
       .notNull()

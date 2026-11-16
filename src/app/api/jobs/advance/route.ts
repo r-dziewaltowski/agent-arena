@@ -69,6 +69,10 @@ function describe(result: AdvanceResult): string {
           return `failed: ${o.error}`;
         case "skipped":
           return `skipped (another step is running or it isn't due)${when(result.requeuedFor)}`;
+        case "silenced":
+          return `${o.speaker} silenced: ${o.reason}${when(result.requeuedFor)}`;
+        case "completed":
+          return "completed (only silenced agents were left to speak)";
       }
     }
   }

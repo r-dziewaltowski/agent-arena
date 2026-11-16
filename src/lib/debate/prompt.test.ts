@@ -8,7 +8,7 @@ import {
   turnKindFor,
   type Speaker,
 } from "./prompt";
-import { CUSTOM_TRAIT, styleSentence, submittedTrait, toneSentence, stanceOf, STYLE_PRESETS } from "./traits";
+import { CREATIVITY_SENTENCES, CUSTOM_TRAIT, styleSentence, submittedTrait, toneSentence, stanceOf, STYLE_PRESETS } from "./traits";
 
 const ada: Speaker = { id: "a", name: "Ada", persona: "An urban planner.", style: "analytical", tone: "formal", stance: "contrarian" };
 const bram: Speaker = { id: "b", name: "Bram", persona: "A taxi driver.", style: "quotes old proverbs", tone: "dry", stance: "agreeable" };
@@ -52,6 +52,13 @@ describe("buildPrompt", () => {
     expect(p.system).toContain("Your rhetorical style: quotes old proverbs.");
     expect(p.system).toContain("The other participants: Ada.");
     expect(p.stopSequences).toEqual(["\nAda:"]);
+  });
+
+  it("asks for Creativity in words for models that take no temperature", () => {
+    const input = { topic: "Ban cars?", rounds: 3, round: 1, kind: "opening" as const, participants: [ada, bram], turns: [], othersSpokeThisRound: false };
+    expect(buildPrompt({ ...input, speaker: { ...ada, creativityInPrompt: "wild" } }).system).toContain(CREATIVITY_SENTENCES.wild);
+    expect(buildPrompt({ ...input, speaker: { ...ada, creativityInPrompt: "balanced" } }).system).not.toContain("null");
+    expect(buildPrompt({ ...input, speaker: ada }).system).not.toContain(CREATIVITY_SENTENCES.wild);
   });
 
   it("asks for a length the model can finish within its token cap", () => {
@@ -164,6 +171,25 @@ describe("resolveSettings and callSettings", () => {
     });
     expect(callSettings("google", "gemini-9-unknown", base).providerOptions?.google?.thinkingConfig.thinkingLevel).toBe("minimal");
     expect(callSettings("google", "gemma-4-31b-it", base)).toEqual(base); // Gemma: not in the catalog, no setting guessed
+  });
+
+  it("leaves out what each OpenRouter model rejects, and keeps its reasoning out of the reply", () => {
+    const base = { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] };
+    // Claude: no temperature (Creativity goes in the prompt), stop sequences kept.
+    expect(resolveSettings("openrouter", "wild", "medium", "anthropic/claude-haiku-5.5")).toEqual({ temperature: null, maxOutputTokens: 220 });
+    expect(callSettings("openrouter", "anthropic/claude-haiku-5.5", { ...base, temperature: undefined })).toEqual({
+      maxOutputTokens: 220,
+      stopSequences: ["\nBram:"],
+      providerOptions: { openrouter: { reasoning: { effort: "low", exclude: true } } },
+    });
+    // GPT-5.6 Luna: neither temperature nor stop sequences.
+    expect(callSettings("openrouter", "openai/gpt-5.6-luna", base)).toEqual({
+      maxOutputTokens: 220,
+      providerOptions: { openrouter: { reasoning: { effort: "minimal", exclude: true } } },
+    });
+    // DeepSeek takes both.
+    expect(resolveSettings("openrouter", "wild", "medium", "deepseek/deepseek-v4.1-flash").temperature).toBe(1.3);
+    expect(callSettings("openrouter", "deepseek/deepseek-v4.1-flash", base)).toMatchObject({ temperature: 0.7, stopSequences: ["\nBram:"] });
   });
 
   it("sends Ollama its native options", () => {

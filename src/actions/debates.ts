@@ -1,15 +1,18 @@
 "use server";
 
+import { eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { catalogAvailability, listOllamaModels } from "@/lib/ai/models";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import type { Db } from "@/lib/db/client";
+import { agents } from "@/lib/db/schema";
 import { createDebate, deleteDebate, enter, LifecycleError, resumeDebate, startDebate, withdraw } from "@/lib/debate/lifecycle";
 import { queueDebate } from "@/lib/jobs/advance";
 import { getQueue } from "@/lib/jobs/queue";
 import { pickValues, type FormValues } from "@/lib/form-values";
+import { canUsePaidModels } from "@/lib/paid-models";
 import { localToEpoch } from "@/lib/time";
 
 export type FormState = { message?: string; errors?: Partial<Record<string, string[]>>; values?: FormValues };
@@ -75,13 +78,19 @@ export async function enterAction(_prev: FormState, formData: FormData): Promise
   const me = await requireUser();
   const db = await getDb();
   const debateId = String(formData.get("debateId"));
+  const agentId = String(formData.get("agentId"));
+  // An agent on an OpenRouter model speaks on its owner's own account, so it needs one connected.
+  const [agent] = await db.select({ provider: agents.provider }).from(agents).where(eq(agents.id, agentId));
+  if (agent?.provider === "openrouter" && !(await canUsePaidModels(db, me.id))) {
+    return { message: "This agent uses an OpenRouter model. Connect your OpenRouter account on your account page first." };
+  }
   try {
     await enter(
       db,
       {
         debateId,
         userId: me.id,
-        agentId: String(formData.get("agentId")),
+        agentId,
         position: Number(formData.get("position")),
       },
       Date.now(),

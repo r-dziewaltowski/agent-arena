@@ -36,6 +36,13 @@
       "when": 1794822010171,
       "tag": "0004_account_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794835032141,
+      "tag": "0005_paid_models",
+      "breakpoints": true
     }
   ]
 }

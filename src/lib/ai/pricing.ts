@@ -2,20 +2,30 @@ import { findModel } from "./models";
 import type { Provider } from "./provider";
 
 /**
- * Cost per million tokens, in USD, for paid models (M5, billed to the agent owner's own key).
- * Free models (Ollama, Groq's free tier) cost nothing.
+ * What paid models cost, from the catalog's list prices (USD per million tokens). Paid turns are
+ * billed to the agent owner's own OpenRouter account; free models (Ollama, Groq's and Google's
+ * free tiers) cost nothing.
  */
-const PAID_PRICES: Record<string, { input: number; output: number }> = {
-  "anthropic/claude-haiku-5-5": { input: 0.1, output: 0.5 },
-};
+export type Price = { input: number; output: number };
 
-export function isFree(provider: string, modelId: string): boolean {
-  if (provider === "ollama") return true;
-  return findModel(provider as Provider, modelId)?.tier !== "paid" && !PAID_PRICES[`${provider}/${modelId}`];
+export function priceOf(provider: string | null, modelId: string | null): Price | null {
+  if (!provider || !modelId) return null;
+  const entry = findModel(provider as Provider, modelId);
+  return entry?.tier === "paid" && entry.price ? entry.price : null;
 }
 
-export function costUsd(provider: string, modelId: string, promptTokens: number, completionTokens: number): number {
-  const price = PAID_PRICES[`${provider}/${modelId}`];
-  if (!price) return 0;
+export function costUsd(price: Price, promptTokens: number, completionTokens: number): number {
   return (promptTokens * price.input + completionTokens * price.output) / 1_000_000;
+}
+
+/** A turn's rough cost, for the agent form: a typical prompt plus a turn of the given length. */
+export function costPerTurnUsd(price: Price, maxOutputTokens = 220): number {
+  return costUsd(price, 1_500, maxOutputTokens);
+}
+
+/** "$0.0004", "$0.012", "$1.20": enough digits to show fractions of a cent. */
+export function formatUsd(usd: number): string {
+  if (usd === 0) return "$0";
+  if (usd >= 1) return `$${usd.toFixed(2)}`;
+  return `$${usd.toPrecision(2).replace(/0+$/, "").replace(/\.$/, "")}`;
 }

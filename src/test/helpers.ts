@@ -117,6 +117,25 @@ export function rateLimitedModel(retryAfterSeconds?: number): MockLanguageModelV
   });
 }
 
+/** A fake model whose calls fail with the given HTTP status, as a provider's API would. */
+export function httpErrorModel(
+  statusCode: number,
+  opts: { message?: string; responseHeaders?: Record<string, string> } = {},
+): MockLanguageModelV4 {
+  return new MockLanguageModelV4({
+    doStream: async () => {
+      throw new APICallError({
+        message: opts.message ?? `HTTP ${statusCode}`,
+        url: "https://openrouter.ai/api/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode,
+        responseHeaders: opts.responseHeaders,
+        isRetryable: false,
+      });
+    },
+  });
+}
+
 export function resolverFor(model: MockLanguageModelV4): ModelResolver {
   return () => model;
 }

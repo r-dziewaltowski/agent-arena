@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState, type ReactNode } from "react";
 import { saveAgent, type AgentFormState } from "@/actions/agents";
 import { Button, Field, inputClass, Notice, cx } from "@/components/ui";
@@ -35,10 +36,13 @@ export type AgentFormValues = {
 export function AgentForm({
   initial,
   modelGroups,
+  paidConnected = false,
   currentModelLabel,
 }: {
   initial: AgentFormValues;
   modelGroups: ModelGroup[];
+  /** Whether the user has connected OpenRouter; otherwise the form says how to get paid models. */
+  paidConnected?: boolean;
   /** Shown when the agent's saved model isn't among today's options (e.g. retired). */
   currentModelLabel?: string;
 }) {
@@ -80,7 +84,7 @@ export function AgentForm({
             <option value={currentValue}>{currentModelLabel ?? initial.modelId} (no longer offered)</option>
           )}
           {modelGroups.map((g) => (
-            <optgroup key={g.provider} label={g.label}>
+            <optgroup key={g.label} label={g.label}>
               {g.models.map((m) => (
                 <option key={m.id} value={`${m.provider}::${m.id}`}>
                   {m.name}
@@ -90,6 +94,15 @@ export function AgentForm({
           ))}
         </SelectWithHint>
       </div>
+      {!paidConnected && (
+        <p className="-mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+          Want more models, including Claude and GPT? Connect your OpenRouter account on{" "}
+          <Link href="/account" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+            your account page
+          </Link>
+          : two more free models, and paid ones on your own credit.
+        </p>
+      )}
 
       <Field
         label="Persona"

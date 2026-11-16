@@ -97,6 +97,12 @@ export const debateParticipants = sqliteTable(
     maxOutputTokens: integer("max_output_tokens"),
     /** The agent's chosen model when it was retired and the provider default ran instead. */
     modelFallbackFrom: text("model_fallback_from"),
+    /**
+     * Set when this agent can no longer speak because its owner's paid-model key stopped working
+     * (or was disconnected); its remaining turns are skipped and the debate carries on.
+     */
+    silencedAt: integer("silenced_at"),
+    silencedReason: text("silenced_reason"),
   },
   (t) => [
     index("participants_debate_idx").on(t.debateId),

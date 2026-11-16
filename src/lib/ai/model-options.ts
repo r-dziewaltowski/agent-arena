@@ -1,22 +1,26 @@
 import { findModel, listOllamaModels, offeredModels, PROVIDER_LABELS } from "./models";
-import { defaultModelFor, type Provider } from "./provider";
+import { defaultModelFor, googleApiKey, type Provider } from "./provider";
 
 export type ModelOption = { provider: Provider; id: string; name: string; description: string };
 export type ModelGroup = { provider: Provider; label: string; models: ModelOption[] };
 
+function catalogGroup(provider: Provider): ModelGroup {
+  return {
+    provider,
+    label: PROVIDER_LABELS[provider],
+    models: offeredModels(provider).map(({ provider, id, name, description }) => ({ provider, id, name, description })),
+  };
+}
+
 /**
- * The models the agent form can offer right now: Groq's offered catalog models when its key is
- * set, and the models installed in Ollama when it can be reached. Paid models arrive in M5.
+ * The models the agent form can offer right now: Groq's and Google's offered catalog models when
+ * their keys are set, and the models installed in Ollama when it can be reached. Paid models
+ * arrive in M5.
  */
 export async function getModelOptions(): Promise<ModelGroup[]> {
   const groups: ModelGroup[] = [];
-  if (process.env.GROQ_API_KEY) {
-    groups.push({
-      provider: "groq",
-      label: PROVIDER_LABELS.groq,
-      models: offeredModels("groq").map(({ provider, id, name, description }) => ({ provider, id, name, description })),
-    });
-  }
+  if (process.env.GROQ_API_KEY) groups.push(catalogGroup("groq"));
+  if (googleApiKey()) groups.push(catalogGroup("google"));
   const installed = await listOllamaModels();
   if (installed && installed.length > 0) {
     groups.push({

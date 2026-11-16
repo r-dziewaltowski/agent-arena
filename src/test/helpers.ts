@@ -61,7 +61,7 @@ const usage = (input: number, output: number) => ({
   outputTokens: { total: output, text: output, reasoning: undefined },
 });
 
-type Reply = string | { text: string; finishReason?: "stop" | "length"; inputTokens?: number; outputTokens?: number };
+type Reply = string | { text: string; finishReason?: "stop" | "length" | "content-filter"; inputTokens?: number; outputTokens?: number };
 
 /** A fake model that streams the given replies in order (the last one repeats). */
 export function scriptedModel(replies: Reply[]): MockLanguageModelV4 {

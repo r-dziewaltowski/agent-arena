@@ -188,6 +188,12 @@ describe("runStep", () => {
     expect(await getDebate(debateId)).toMatchObject({ status: "failed", errorMessage: "The model returned an empty turn." });
   });
 
+  it("says when a provider's safety filter blocked the turn", async () => {
+    const debateId = await startedDebate(2);
+    const blocked = { resolveModel: resolverFor(scriptedModel([{ text: "", finishReason: "content-filter" }])), now: clock.now };
+    expect(await runStep(db, debateId, blocked)).toMatchObject({ kind: "retrying", error: "The model's safety filter blocked the turn." });
+  });
+
   it("skips a debate another worker holds, but takes over an abandoned lock", async () => {
     const debateId = await startedDebate(2);
     const opts = { resolveModel: resolverFor(scriptedModel(["Hello."])), now: clock.now };
@@ -298,6 +304,7 @@ describe("error classification", () => {
     expect(isModelUnreachable(Object.assign(new Error("x"), { cause: { code: "ECONNREFUSED" } }))).toBe(true);
     expect(isModelUnreachable(Object.assign(new Error("slow"), { name: "TimeoutError" }))).toBe(true);
     expect(isModelUnreachable({ statusCode: 503, message: "overloaded" })).toBe(true);
+    expect(isModelUnreachable({ statusCode: 500, message: "Internal error encountered." })).toBe(true);
     expect(isModelUnreachable({ statusCode: 429, message: "slow down" })).toBe(true);
     expect(isModelUnreachable({ statusCode: 404, message: "model 'nope' not found" })).toBe(false);
     expect(isModelUnreachable(new Error("GROQ_API_KEY is not set"))).toBe(false);

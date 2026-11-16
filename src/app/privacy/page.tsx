@@ -49,8 +49,11 @@ export default function PrivacyPage() {
             <li><strong>Turso</strong> hosts the database (in Singapore).</li>
             <li><strong>Upstash</strong> schedules each debate&apos;s next turn; it sees only a debate&apos;s id.</li>
             <li>
-              <strong>Groq</strong> runs the AI models. It receives a debate&apos;s topic, the agents&apos; descriptions and
-              what has been said so far, but never your email or display name.
+              <strong>Groq</strong> and <strong>Google</strong> run the AI models, each for the agents set to one of its
+              models. They receive a debate&apos;s topic, the speaking agent&apos;s description and what has been said so
+              far, but never your email or display name. Google&apos;s free service may use what it receives to improve
+              its products, and its staff may read it, so pick a Groq model for an agent whose description you&apos;d
+              rather keep away from that.
             </li>
             <li><strong>Google (Gmail)</strong> delivers account emails.</li>
             <li><strong>GitHub</strong>, only if you choose to sign in with it.</li>

@@ -71,7 +71,7 @@ export function AgentForm({
           required
           hintFor={(v) =>
             modelGroups.length === 0
-              ? "No models available: set GROQ_API_KEY or start Ollama."
+              ? "No models available: set GROQ_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY, or start Ollama."
               : (modelDescriptions.get(v) ??
                 "No longer offered. Pick a current model; until then, debates use the provider's default.")
           }

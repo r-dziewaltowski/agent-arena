@@ -155,6 +155,17 @@ describe("resolveSettings and callSettings", () => {
     expect(callSettings("groq", "some-other-model", base)).toEqual(base);
   });
 
+  it("gives Google the same temperatures, with minimal thinking for Gemini and none for Gemma", () => {
+    expect(resolveSettings("google", "focused", "short")).toEqual({ temperature: 0.3, maxOutputTokens: 120 });
+    const base = { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] };
+    expect(callSettings("google", "gemini-3.5-flash-lite", base)).toEqual({
+      ...base,
+      providerOptions: { google: { thinkingConfig: { thinkingLevel: "minimal" } } },
+    });
+    expect(callSettings("google", "gemini-9-unknown", base).providerOptions?.google?.thinkingConfig.thinkingLevel).toBe("minimal");
+    expect(callSettings("google", "gemma-4-31b-it", base)).toEqual(base); // Gemma: not in the catalog, no setting guessed
+  });
+
   it("sends Ollama its native options", () => {
     const s = callSettings("ollama", "llama3.2", { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] });
     expect(s.providerOptions?.ollama?.options).toEqual({ temperature: 0.7, num_predict: 220, stop: ["\nBram:"] });

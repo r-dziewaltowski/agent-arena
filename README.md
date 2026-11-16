@@ -11,7 +11,7 @@ A portfolio project built with Next.js 16, the Vercel AI SDK and local models th
 | Area | Choice |
 |---|---|
 | App | Next.js 16 (App Router), TypeScript, Tailwind CSS v4 |
-| LLM | Vercel AI SDK v7 (`ai`) behind a provider seam; Ollama locally, Groq's free tier hosted, paid models later on users' own keys |
+| LLM | Vercel AI SDK v7 (`ai`) behind a provider seam; Ollama locally, Groq's and Google's free tiers hosted, paid models later on users' own keys |
 | Data | SQLite via Drizzle ORM and `@libsql/client` (file locally, Turso in production) |
 | Auth | Better Auth (email and password, GitHub OAuth) |
 | Hosting (M4) | Vercel + Turso + Upstash QStash, all on free tiers |
@@ -40,8 +40,9 @@ The project never pays for model calls: free debates run on a free tier (with sh
 
 - Node.js 24 or newer
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/), running: `npm run dev` starts QStash's local dev server in it (on Windows, QStash's standalone dev server binary is unsigned, so Smart App Control blocks it; Docker avoids that)
-- A model, either or both of:
-  - a free [Groq](https://console.groq.com) API key in `.env.local` (`GROQ_API_KEY`), or
+- A model, any of:
+  - a free [Groq](https://console.groq.com) API key in `.env.local` (`GROQ_API_KEY`),
+  - a free Google [AI Studio](https://aistudio.google.com/apikey) API key (`GOOGLE_GENERATIVE_AI_API_KEY`; never set up billing for its project), or
   - [Ollama](https://ollama.com) running locally, with a model pulled:
 
 ```bash
@@ -63,6 +64,10 @@ OLLAMA_DEFAULT_MODEL=llama3.2
 # Groq free tier (use an account with no payment method, so it can never be billed)
 GROQ_API_KEY=
 GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
+
+# Google free tier: Gemini Flash-Lite (an AI Studio key whose project has no billing, so it can never be billed)
+GOOGLE_GENERATIVE_AI_API_KEY=
+# GOOGLE_DEFAULT_MODEL=gemini-3.5-flash-lite
 
 # Better Auth: a random secret of 32+ characters that signs login sessions
 BETTER_AUTH_SECRET=
@@ -118,7 +123,7 @@ Production runs on Vercel's Hobby plan, with the database on Turso and the queue
 
 1. **QStash:** create an Upstash account, open QStash (either region) and copy `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`.
 2. **Turso:** create an account, then in the dashboard create a database in Singapore (`agent-arena`, on standard SQLite, not the TursoDB rewrite) and a read-write token for it with no expiry. Its URL (`libsql://…`) and the token become `DATABASE_URL` and `DATABASE_AUTH_TOKEN`. (The Turso CLI needs WSL on Windows; the dashboard does everything needed here.)
-3. **Vercel:** sign in with GitHub, import this repository, and before the first deploy add the environment variables for **Production**: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `GROQ_API_KEY`, a new `BETTER_AUTH_SECRET` (not the local one), and the four `QSTASH_*` values. Then deploy.
+3. **Vercel:** sign in with GitHub, import this repository, and before the first deploy add the environment variables for **Production**: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `GROQ_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` (optional), a new `BETTER_AUTH_SECRET` (not the local one), and the four `QSTASH_*` values. Then deploy.
 4. **Email:** create a Gmail account just for the app (e.g. agentarena.mail@gmail.com), turn on 2-Step Verification for it, then create an app password at https://myaccount.google.com/apppasswords. Add `GMAIL_USER` (the address) and `GMAIL_APP_PASSWORD` (the 16 letters, without spaces) to Vercel for **Production**. Production deploys fail without them, since nobody could confirm their email. Gmail allows about 500 emails a day; with a domain later, a provider such as Resend can replace it in `src/lib/email/send.ts`.
 5. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
 
@@ -130,7 +135,7 @@ Each deploy runs `npm run vercel-build`: it applies pending migrations to that e
 
 | Command | What it does |
 |---|---|
-| `npm run debate:cli` | Runs a debate between two seeded agents in the terminal (`-- --topic "…" --rounds 3`; add `--provider groq` to use Groq instead of local Ollama) |
+| `npm run debate:cli` | Runs a debate between two seeded agents in the terminal (`-- --topic "…" --rounds 3`; add `--provider groq` or `--provider google` instead of local Ollama, and `--model <id>` for a specific model) |
 | `npm run dev:web` | Starts only the web app, without the queue (debates won't advance) |
 | `npm run queue:dev` | Starts only the QStash dev server in Docker |
 | `npm run queue:setup` | Creates the sweep schedule on a deployment (`APP_URL=https://… npm run queue:setup`) |

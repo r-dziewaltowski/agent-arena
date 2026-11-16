@@ -14,6 +14,8 @@ export type ModelEntry = {
   tier: "free" | "paid";
   /** Reasoning models spend part of the token cap thinking; keep it minimal and hidden. */
   reasoning?: { effort: "none" | "low"; format: "hidden" };
+  /** Google's equivalent: how much a Gemini model thinks first (Gemma doesn't). */
+  thinkingLevel?: "minimal" | "low";
   /** False once a model is retired: hidden from the picker, replaced at debate start. */
   offered: boolean;
   isDefault?: boolean;
@@ -56,11 +58,26 @@ export const MODEL_CATALOG: ModelEntry[] = [
     tier: "free",
     offered: false,
   },
+  // Google's free Gemma 4 models were left out (2026-11-16): most requests failed with "Internal
+  // error" or "high demand", and the rest took about a minute. Retest before adding them:
+  // `npm run models:google -- gemma-4-31b-it 10`. Give Gemma `thinkingLevel: "minimal"` (the only
+  // level it accepts): otherwise it thinks ~300 tokens, more than a medium turn's cap.
+  {
+    provider: "google",
+    id: "gemini-3.5-flash-lite",
+    name: "Gemini 3.5 Flash-Lite",
+    description: "Google's Gemini, in its free size. Concise; slower than Groq.",
+    tier: "free",
+    thinkingLevel: "minimal",
+    offered: true,
+    isDefault: true,
+  },
 ];
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
   ollama: "Ollama (local)",
   groq: "Groq (free tier)",
+  google: "Google (free tier)",
   anthropic: "Anthropic (your key)",
 };
 

@@ -13,6 +13,12 @@ export function explainFailure(errorMessage: string | null): { summary: string; 
   if (/empty turn/i.test(m)) {
     return { summary: "The model kept returning empty replies.", canResume: true };
   }
+  if (/safety filter/i.test(m)) {
+    return {
+      summary: "The model's safety filter kept blocking the reply. A different model, or a gentler topic or persona, may get through.",
+      canResume: true,
+    };
+  }
   if (/provider is added in M5|anthropic/i.test(m)) {
     return { summary: "This debate uses a paid model that isn't supported yet.", canResume: false };
   }

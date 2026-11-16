@@ -21,6 +21,8 @@ export const e2eEnv: Record<string, string> = {
   E2E_FAKE_MODEL: "1",
   // Makes the Groq models selectable; the fake model answers instead, so this key is never used.
   GROQ_API_KEY: "e2e-fake-key-never-sent",
+  // Google stays off, so the model picker matches what the tests expect.
+  GOOGLE_GENERATIVE_AI_API_KEY: "",
   // An address where nothing listens, so the model list doesn't depend on a local Ollama.
   OLLAMA_BASE_URL: "http://127.0.0.1:9/api",
   QSTASH_URL: QSTASH_DEV_URL,

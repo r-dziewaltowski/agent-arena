@@ -189,7 +189,11 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
     if (streamError || cleaned.length === 0) {
       await db.delete(turns).where(eq(turns.id, turnId));
       turnId = null;
-      const error = streamError ? describeError(streamError) : "The model returned an empty turn.";
+      const error = streamError
+        ? describeError(streamError)
+        : finishReason === "content-filter"
+          ? "The model's safety filter blocked the turn."
+          : "The model returned an empty turn.";
 
       if (streamError && isModelUnreachable(streamError)) {
         const attempts = debate.waitAttempts + 1;
@@ -355,7 +359,8 @@ export function isModelUnreachable(err: unknown): boolean {
   ];
   for (const e of errorChain(err)) {
     if (e.name === "AbortError" || e.name === "TimeoutError") return true;
-    if (typeof e.statusCode === "number" && [502, 503, 504].includes(e.statusCode)) return true;
+    // 500 too: Google answers "Internal error" for a busy model, which clears up on its own.
+    if (typeof e.statusCode === "number" && [500, 502, 503, 504].includes(e.statusCode)) return true;
     const haystack = `${e.code ?? ""} ${e.message ?? String(e)}`;
     if (patterns.some((p) => p.test(haystack))) return true;
   }

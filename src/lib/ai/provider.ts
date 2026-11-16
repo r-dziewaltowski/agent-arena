@@ -1,3 +1,4 @@
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createGroq } from "@ai-sdk/groq";
 import type { LanguageModel } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
@@ -5,12 +6,29 @@ import type { Creativity, TurnLength } from "../debate/traits";
 import { fakeModel, fakeModelsEnabled } from "./fake-model";
 import { findModel } from "./models";
 
-export type Provider = "ollama" | "groq" | "anthropic";
+export type Provider = "ollama" | "groq" | "google" | "anthropic";
 
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434/api";
 export const DEFAULT_OLLAMA_MODEL = "llama3.2";
 /** Groq's free tier, on an account with no payment method, so it can never be billed. */
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
+/** Google's free tier (Gemini API key from AI Studio, billing never enabled), likewise never billed. */
+export const DEFAULT_GOOGLE_MODEL = "gemini-3.5-flash-lite";
+
+/** Google's key, under the name its SDK reads by default. */
+export function googleApiKey(): string | undefined {
+  return process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
+}
+
+/**
+ * Gemini models think before answering, and thinking tokens count against the turn's cap: keep
+ * it minimal. Settings come from the model catalog; unknown Gemini ids get the minimal level.
+ */
+export function googleThinkingOptions(modelId: string): { thinkingConfig: { thinkingLevel: "minimal" | "low" } } | undefined {
+  const entry = findModel("google", modelId);
+  const level = entry ? entry.thinkingLevel : modelId.startsWith("gemini-") ? "minimal" : undefined;
+  return level ? { thinkingConfig: { thinkingLevel: level } } : undefined;
+}
 
 /**
  * Groq's current chat models reason before answering, and reasoning tokens count against the
@@ -34,6 +52,7 @@ export function groqReasoningOptions(
 const TEMPERATURES: Record<Provider, Record<Creativity, number>> = {
   ollama: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
   groq: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
+  google: { focused: 0.3, balanced: 0.7, creative: 1.0, wild: 1.3 },
   anthropic: { focused: 0.2, balanced: 0.6, creative: 0.8, wild: 1.0 },
 };
 
@@ -44,6 +63,8 @@ export function defaultModelFor(provider: Provider): string {
       return process.env.OLLAMA_DEFAULT_MODEL ?? DEFAULT_OLLAMA_MODEL;
     case "groq":
       return process.env.GROQ_DEFAULT_MODEL ?? DEFAULT_GROQ_MODEL;
+    case "google":
+      return process.env.GOOGLE_DEFAULT_MODEL ?? DEFAULT_GOOGLE_MODEL;
     case "anthropic":
       return "claude-haiku-5-5";
   }
@@ -70,13 +91,14 @@ type CallSettings = {
   providerOptions?: {
     ollama?: { options: { temperature?: number; num_predict?: number; stop?: string[] } };
     groq?: { reasoningEffort: "none" | "low"; reasoningFormat: "hidden" };
+    google?: { thinkingConfig: { thinkingLevel: "minimal" | "low" } };
   };
 };
 
 /**
  * Generation settings in the form each provider honours. Ollama's default API ignores the SDK's
  * generic `stopSequences` and `maxOutputTokens`, so for Ollama they go in its native options.
- * Groq's reasoning models get minimal, hidden reasoning.
+ * Groq's reasoning models get minimal, hidden reasoning; Gemini models minimal thinking.
  */
 export function callSettings(
   provider: Provider,
@@ -94,6 +116,10 @@ export function callSettings(
   if (provider === "groq") {
     const reasoning = groqReasoningOptions(modelId);
     return reasoning ? { ...generic, providerOptions: { groq: reasoning } } : generic;
+  }
+  if (provider === "google") {
+    const thinking = googleThinkingOptions(modelId);
+    return thinking ? { ...generic, providerOptions: { google: thinking } } : generic;
   }
   return generic;
 }
@@ -114,6 +140,11 @@ export const resolveModel: ModelResolver = (provider, modelId) => {
       const apiKey = process.env.GROQ_API_KEY;
       if (!apiKey) throw new Error("GROQ_API_KEY is not set, so Groq models can't be used.");
       return createGroq({ apiKey })(modelId);
+    }
+    case "google": {
+      const apiKey = googleApiKey();
+      if (!apiKey) throw new Error("GOOGLE_GENERATIVE_AI_API_KEY is not set, so Google models can't be used.");
+      return createGoogleGenerativeAI({ apiKey })(modelId);
     }
     case "anthropic":
       throw new Error("The Anthropic provider is added in M5.");

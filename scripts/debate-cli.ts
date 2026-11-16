@@ -25,8 +25,8 @@ function arg(name: string, fallback: string): string {
 const topic = arg("topic", "Should city centres ban private cars?");
 const rounds = Number(arg("rounds", "2"));
 const provider = arg("provider", "ollama") as Provider;
-if (!["ollama", "groq"].includes(provider)) {
-  console.error(`Unknown --provider "${provider}". Use ollama or groq.`);
+if (!["ollama", "groq", "google"].includes(provider)) {
+  console.error(`Unknown --provider "${provider}". Use ollama, groq or google.`);
   process.exit(1);
 }
 const model = arg("model", defaultModelFor(provider));

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { AgentForm } from "@/components/agents/agent-form";
 import { Card, PageHeader } from "@/components/ui";
 import { defaultOption, getModelOptions } from "@/lib/ai/model-options";
+import { requireUser } from "@/lib/auth/session";
 
 export default function NewAgentPage() {
   return (
@@ -17,7 +18,8 @@ export default function NewAgentPage() {
 }
 
 async function NewAgentForm() {
-  const groups = await getModelOptions();
+  // The proxy only sees that a sign-in cookie exists; an expired one must not show the form.
+  const [, groups] = await Promise.all([requireUser("/agents/new"), getModelOptions()]);
   const model = defaultOption(groups);
   return (
     <AgentForm

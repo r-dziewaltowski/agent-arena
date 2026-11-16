@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { E2E_BASE_URL } from "./env";
 import { emailCount, linkFromEmail } from "./outbox";
 
 /**
@@ -115,6 +116,15 @@ test("the account page changes your name and password, and deletes the account",
 
   await signIn(page, email, "another-password-1");
   await expect(page.getByText("Invalid email or password.")).toBeVisible();
+});
+
+test("a stale sign-in cookie doesn't show the new agent or new debate forms", async ({ page, context }) => {
+  // The proxy lets any session cookie through; the pages themselves must check it's still valid.
+  await context.addCookies([{ name: "better-auth.session_token", value: "expired-or-revoked", url: E2E_BASE_URL }]);
+  for (const path of ["/agents/new", "/debates/new"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(new RegExp(`/sign-in\\?next=${encodeURIComponent(path)}$`));
+  }
 });
 
 test("the account page needs you signed in, and the privacy page is linked from every page", async ({ page }) => {

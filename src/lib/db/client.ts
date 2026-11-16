@@ -19,10 +19,33 @@ type FetchWithOriginal = typeof fetch & { _nextOriginalFetch?: typeof fetch };
  * shared by every request and sends queued queries together, so one prerender's rejected fetch
  * failed other requests' queries too (HANGING_PROMISE_REJECTION on every signed-in page). Database
  * calls aren't part of Next's data cache, so they go through the original, untracked fetch.
+ *
+ * It also retries once when the connection was closed before any reply. Turso closes idle
+ * connections, and Vercel freezes the function between requests, so a warm function can send its
+ * next query down a connection that is already gone ("other side closed"), failing the whole page.
+ * Turso never received that query, so sending it again on a fresh connection is safe.
  */
-function untrackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function untrackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const current = globalThis.fetch as FetchWithOriginal;
-  return (current._nextOriginalFetch ?? current)(input, init);
+  const send = current._nextOriginalFetch ?? current;
+  const spare = input instanceof Request ? input.clone() : input; // a request body can be read only once
+  try {
+    return await send(input, init);
+  } catch (err) {
+    if (!closedBeforeReply(err)) throw err;
+    return send(spare, init);
+  }
+}
+
+/**
+ * A dead keep-alive connection: closed by the server before it answered, or a write that never
+ * got through (seen in production: "other side closed" and "write ETIMEDOUT" on the same socket).
+ */
+export function closedBeforeReply(err: unknown): boolean {
+  const cause = (err as { cause?: { code?: string; syscall?: string } } | null)?.cause;
+  if (!(err instanceof TypeError) || !cause) return false;
+  if (["UND_ERR_SOCKET", "ECONNRESET", "EPIPE"].includes(cause.code ?? "")) return true;
+  return cause.code === "ETIMEDOUT" && cause.syscall === "write";
 }
 
 /**

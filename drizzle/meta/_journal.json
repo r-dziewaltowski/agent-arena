@@ -43,6 +43,13 @@
       "when": 1794835032141,
       "tag": "0005_paid_models",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794904018813,
+      "tag": "0006_reading_pace",
+      "breakpoints": true
     }
   ]
 }

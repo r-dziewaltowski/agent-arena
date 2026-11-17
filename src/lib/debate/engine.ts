@@ -15,6 +15,7 @@ import type { Creativity } from "./traits";
 import { publishChunk } from "./broadcast";
 import { votingClosesAtFor } from "./lifecycle";
 import { buildPrompt, cleanTurnText, trimToLastSentence, turnKindFor, type Speaker } from "./prompt";
+import { nextTurnAt, readingWordsPerSecond } from "./pacing";
 import { maybeFoldSummary } from "./summarize";
 
 /** A lock older than this is considered abandoned (e.g. the function was killed mid-turn). */
@@ -31,7 +32,8 @@ const MAX_RETRY_AFTER_MS = 24 * 60 * 60_000;
 
 export type StepOutcome =
   | { kind: "skipped" }
-  | { kind: "turn"; turnId: string; seq: number; speaker: string; text: string; debateCompleted: boolean }
+  /** `nextTurnAt`: when the next turn may start (viewers are still reading this one), or null for now. */
+  | { kind: "turn"; turnId: string; seq: number; speaker: string; text: string; debateCompleted: boolean; nextTurnAt: number | null }
   /** The speaker's owner's paid-model key stopped working: that agent is skipped from now on. */
   | { kind: "silenced"; speaker: string; reason: string }
   /** Only silenced agents were left to speak, so the debate ended. */
@@ -51,6 +53,8 @@ export type StepOptions = {
   /** Ollama can take 10-20 s to load a model, so the first chunk gets a long allowance. */
   firstChunkTimeoutMs?: number;
   chunkTimeoutMs?: number;
+  /** Reading pace (see `pacing.ts`); null for none. Defaults to the configured pace. */
+  wordsPerSecond?: number | null;
 };
 
 /** Delay before the next attempt after `attempts` consecutive "model unreachable" errors. */
@@ -190,6 +194,10 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
     });
     opts.onTurnStart?.({ speaker: speaker.name, round, rounds: debate.rounds, kind, seq });
 
+    // Viewers get the text at reading pace from its first words (pacing.ts).
+    const pace = opts.wordsPerSecond === undefined ? readingWordsPerSecond() : opts.wordsPerSecond;
+    let revealStartedAt: number | null = null;
+
     // Generate.
     let streamError: unknown;
     let text = "";
@@ -221,6 +229,10 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       let lastWrite = now();
       for await (const delta of result.textStream) {
         text += delta;
+        if (pace !== null && revealStartedAt === null && text.trim()) {
+          revealStartedAt = now();
+          await db.update(turns).set({ content: text, revealStartedAt, updatedAt: now() }).where(eq(turns.id, turnId));
+        }
         opts.onDelta?.(delta);
         publishChunk(debateId, delta);
         if (now() - lastWrite >= interval) {
@@ -305,6 +317,7 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
     } while (participants[nextIndex]?.silencedAt && nextRound <= debate.rounds);
     const completed = nextRound > debate.rounds;
     const finishedAt = now();
+    const nextAt = completed ? null : nextTurnAt(cleaned, revealStartedAt, finishedAt, pace);
 
     await db.transaction(async (tx) => {
       await tx
@@ -328,7 +341,8 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
           totalCompletionTokens: debate.totalCompletionTokens + completionTokens,
           retryCount: 0,
           waitAttempts: 0,
-          nextAttemptAt: null,
+          // While the turn is still being read, the next one waits (no notice: nothing is wrong).
+          nextAttemptAt: nextAt,
           waitingReason: null,
           ...(completed
             ? {
@@ -350,7 +364,7 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       await maybeFoldSummary(db, debateId, { resolveModel: resolve, ...summarizer });
     }
 
-    return { kind: "turn", turnId: turnId!, seq, speaker: speaker.name, text: cleaned, debateCompleted: completed };
+    return { kind: "turn", turnId: turnId!, seq, speaker: speaker.name, text: cleaned, debateCompleted: completed, nextTurnAt: nextAt };
   } finally {
     await db
       .update(debates)

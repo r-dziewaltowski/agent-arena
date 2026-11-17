@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { displayNames } from "./auth/session";
 import { getDb } from "./db/client";
 import { agents, debateParticipants, debates, turns, votes } from "./db/schema";
+import { readingWordsPerSecond, revealedLength } from "./debate/pacing";
 
 export type DebateRow = typeof debates.$inferSelect;
 
@@ -33,17 +34,27 @@ export type TurnView = {
   completionTokens: number | null;
 };
 
-export function toTurnView(t: typeof turns.$inferSelect): TurnView {
+/**
+ * A turn as viewers see it `now`: a turn being revealed at reading pace (see `pacing.ts`) shows
+ * only its words so far and counts as still being written until they're all out.
+ */
+export function toTurnView(
+  t: typeof turns.$inferSelect,
+  now = Date.now(),
+  wordsPerSecond: number | null = readingWordsPerSecond(),
+): TurnView {
+  const visible = revealedLength(t.content, t.revealStartedAt, now, wordsPerSecond);
+  const revealing = visible < t.content.length;
   return {
     id: t.id,
     seq: t.seq,
     round: t.round,
     kind: t.kind,
-    status: t.status,
+    status: revealing ? "streaming" : t.status,
     participantId: t.participantId,
-    content: t.content,
-    promptTokens: t.promptTokens,
-    completionTokens: t.completionTokens,
+    content: revealing ? t.content.slice(0, visible) : t.content,
+    promptTokens: revealing ? null : t.promptTokens,
+    completionTokens: revealing ? null : t.completionTokens,
   };
 }
 
@@ -90,7 +101,7 @@ export async function loadDebateView(id: string) {
     debate,
     creatorName: names.get(debate.creatorId) ?? "Someone",
     slots,
-    turns: turnRows.filter((t) => t.kind !== "summary").map(toTurnView),
+    turns: turnRows.filter((t) => t.kind !== "summary").map((t) => toTurnView(t)),
     votes: voteRows,
     /** When this view was loaded (decides whether voting is still open). */
     loadedAt: Date.now(),

@@ -85,8 +85,11 @@ async function chain(db: Db, debateId: string, outcome: StepOutcome, deps: JobDe
   const now = deps.now ?? Date.now;
   switch (outcome.kind) {
     case "turn":
+      if (outcome.debateCompleted) return null;
+      // Viewers are reading this turn: the next one starts once it has all been shown.
+      await enqueueOrMark(db, deps.queue, debateId, { at: outcome.nextTurnAt ?? undefined, now: now() });
+      return outcome.nextTurnAt ?? "now";
     case "silenced": // that agent is skipped from now on; the next speaker goes straight away
-      if (outcome.kind === "turn" && outcome.debateCompleted) return null;
       await enqueueOrMark(db, deps.queue, debateId, { now: now() });
       return "now";
     case "completed":

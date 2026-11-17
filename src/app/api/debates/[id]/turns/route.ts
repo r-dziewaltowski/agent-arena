@@ -3,10 +3,12 @@ import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db/client";
 import { debateParticipants, debates, turns } from "@/lib/db/schema";
 import { toTurnView } from "@/lib/debate-view";
+import { readingWordsPerSecond } from "@/lib/debate/pacing";
 
 /**
  * Polled by viewers about once a second while a debate runs: the debate's state plus every
  * finished turn after `after`, and the turn currently being written (its text grows each poll).
+ * Turns are cut to the words viewers should have reached by now (reading pace, see pacing.ts).
  */
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/[id]/turns">) {
   const { id } = await ctx.params;
@@ -15,6 +17,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/
 
   const [debate] = await db.select().from(debates).where(eq(debates.id, id));
   if (!debate) return Response.json({ error: "Not found" }, { status: 404 });
+  const now = Date.now();
 
   const rows = await db
     .select()
@@ -27,6 +30,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/
     .from(debateParticipants)
     .where(and(eq(debateParticipants.debateId, id), isNotNull(debateParticipants.silencedAt)));
 
+  const wordsPerSecond = readingWordsPerSecond();
   return Response.json(
     {
       status: debate.status,
@@ -36,7 +40,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/
       nextAttemptAt: debate.nextAttemptAt,
       totalPromptTokens: debate.totalPromptTokens,
       totalCompletionTokens: debate.totalCompletionTokens,
-      turns: rows.filter((t) => t.kind !== "summary").map(toTurnView),
+      turns: rows.filter((t) => t.kind !== "summary").map((t) => toTurnView(t, now, wordsPerSecond)),
       silenced,
     },
     { headers: { "Cache-Control": "no-store" } },

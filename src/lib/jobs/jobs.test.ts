@@ -5,6 +5,7 @@ import type { Db } from "../db/client";
 import { debates, turns } from "../db/schema";
 import { LOCK_TTL_MS } from "../debate/engine";
 import { createDebate, enter, startDebate } from "../debate/lifecycle";
+import { PAUSE_BETWEEN_TURNS_MS } from "../debate/pacing";
 import {
   createTestDb,
   resolverFor,
@@ -140,6 +141,15 @@ describe("advanceDebate", () => {
     const result = await advanceDebate(db, id, deps());
     expect(result).toMatchObject({ kind: "step", outcome: { kind: "skipped" }, requeuedFor: null });
     expect(q.messages).toEqual([]);
+  });
+
+  it("queues the next turn for when the last one has been read", async () => {
+    const id = await manualDebate();
+    await startDebate(db, { debateId: id, userId: "alice" }, clock.now());
+    const result = await advanceDebate(db, id, { ...deps(scriptedModel(["One two three four five six seven eight nine."])), wordsPerSecond: 3 });
+    const at = clock.now() + 3_000 + PAUSE_BETWEEN_TURNS_MS;
+    expect(result).toMatchObject({ kind: "step", outcome: { kind: "turn", seq: 1 }, requeuedFor: at });
+    expect(q.messages).toEqual([{ debateId: id, at }]);
   });
 
   it("does nothing for deleted, open manual and finished debates", async () => {

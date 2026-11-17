@@ -26,6 +26,7 @@ import {
   waitDelayMs,
 } from "./engine";
 import { createDebate, enter, startDebate } from "./lifecycle";
+import { PAUSE_BETWEEN_TURNS_MS } from "./pacing";
 
 let db: Db;
 let cleanup: () => void;
@@ -237,6 +238,46 @@ describe("runStep", () => {
     });
     const seen = (await Promise.all(reads)).map((rows) => rows[0]);
     expect(seen.some((r) => r?.status === "streaming" && r.content.length > 0)).toBe(true);
+  });
+});
+
+describe("reading pace", () => {
+  const TEN_WORDS = "One two three four five six seven eight nine ten.";
+
+  it("runs at full speed with pacing off", async () => {
+    const debateId = await startedDebate(2);
+    const outcome = await runStep(db, debateId, { resolveModel: resolverFor(scriptedModel([TEN_WORDS])), now: clock.now, wordsPerSecond: null });
+    expect(outcome).toMatchObject({ kind: "turn", nextTurnAt: null });
+    expect((await turnsOf(debateId))[0].revealStartedAt).toBeNull();
+    expect((await getDebate(debateId)).nextAttemptAt).toBeNull();
+  });
+
+  it("waits for a turn to be read before the next one starts", async () => {
+    const debateId = await startedDebate(2);
+    const opts = { resolveModel: resolverFor(scriptedModel([TEN_WORDS])), now: clock.now, wordsPerSecond: 5 };
+
+    const outcome = await runStep(db, debateId, opts);
+    const expected = clock.now() + 2_000 + PAUSE_BETWEEN_TURNS_MS; // 10 words at 5 a second, then a pause
+    expect(outcome).toMatchObject({ kind: "turn", nextTurnAt: expected });
+    expect((await turnsOf(debateId))[0].revealStartedAt).toBe(clock.now());
+    expect((await getDebate(debateId)).nextAttemptAt).toBe(expected);
+    expect((await getDebate(debateId)).waitingReason).toBeNull(); // nothing is wrong: no notice
+
+    // A message arriving early does nothing; on time, the next turn runs.
+    expect(await runStep(db, debateId, opts)).toEqual({ kind: "skipped" });
+    clock.set(expected);
+    expect(await runStep(db, debateId, opts)).toMatchObject({ kind: "turn", seq: 2 });
+  });
+
+  it("doesn't hold back the end of a debate", async () => {
+    const debateId = await startedDebate(2);
+    const opts = { resolveModel: resolverFor(scriptedModel([TEN_WORDS])), now: clock.now, wordsPerSecond: 5 };
+    for (let i = 0; i < 3; i++) {
+      expect(await runStep(db, debateId, opts)).toMatchObject({ kind: "turn", debateCompleted: false });
+      clock.advance(10_000);
+    }
+    expect(await runStep(db, debateId, opts)).toMatchObject({ kind: "turn", debateCompleted: true, nextTurnAt: null });
+    expect((await getDebate(debateId)).status).toBe("completed");
   });
 });
 

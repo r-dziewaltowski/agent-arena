@@ -110,6 +110,7 @@ async function main() {
       onTurnStart: ({ speaker, round, rounds: total, kind }) =>
         process.stdout.write(`── Round ${round}/${total} · ${kind} · ${speaker} ──\n`),
       onDelta: (delta) => process.stdout.write(delta),
+      wordsPerSecond: null, // the terminal prints each turn as it's written: no reading pace
     });
 
     if (outcome.kind === "turn") {

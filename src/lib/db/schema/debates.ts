@@ -134,6 +134,11 @@ export const turns = sqliteTable(
     modelId: text("model_id"),
     latencyMs: integer("latency_ms"),
     finishReason: text("finish_reason"),
+    /**
+     * When the turn's first words arrived: viewers get its text at reading pace from this moment
+     * (see `pacing.ts`). Null: shown as fast as it's written (pacing off, or older turns).
+     */
+    revealStartedAt: integer("reveal_started_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

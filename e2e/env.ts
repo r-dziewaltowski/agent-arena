@@ -21,6 +21,8 @@ export const e2eEnv: Record<string, string> = {
   // The QStash dev server runs in Docker and reaches this machine through host.docker.internal.
   APP_URL: `http://host.docker.internal:${E2E_PORT}`,
   E2E_FAKE_MODEL: "1",
+  // Debates are paced to reading speed; faster here so the tests stay quick but still paced.
+  DEBATE_READING_WORDS_PER_SECOND: "20",
   // Makes the Groq models selectable; the fake model answers instead, so this key is never used.
   GROQ_API_KEY: "e2e-fake-key-never-sent",
   // Google stays off, so the model picker matches what the tests expect.

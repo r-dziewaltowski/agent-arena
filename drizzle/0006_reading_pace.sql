@@ -1,0 +1,1 @@
+ALTER TABLE `turns` ADD `reveal_started_at` integer;

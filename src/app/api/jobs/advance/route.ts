@@ -60,7 +60,11 @@ function describe(result: AdvanceResult): string {
       const o = result.outcome;
       switch (o.kind) {
         case "turn":
-          return o.debateCompleted ? "completed" : `turn ${o.seq} saved${when(result.requeuedFor)}`;
+          if (o.debateCompleted) return "completed";
+          // A future time is the reading pause: the next turn starts once viewers have read this one.
+          return typeof result.requeuedFor === "number"
+            ? `turn ${o.seq} saved; next turn at ${new Date(result.requeuedFor).toLocaleTimeString()} (reading pace)`
+            : `turn ${o.seq} saved${when(result.requeuedFor)}`;
         case "waiting":
           return `model unavailable (${o.error})${when(result.requeuedFor)}`;
         case "retrying":

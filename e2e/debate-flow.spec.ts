@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { linkFromEmail } from "./outbox";
+import { makeAdmin } from "./db";
+import { emailCount, linkFromEmail } from "./outbox";
 
 /**
  * The main product loop through a real browser: two users sign up, build agents, enter a debate
@@ -225,6 +226,7 @@ test("visitors can watch but not vote, and the leaderboard waits for voting to c
   await expect(page.getByText("Should every street have trees?")).toBeVisible();
   await expect(page.getByText(/^Scripted argument \d+\./)).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Vote" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sign in to report a problem" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Who won?", exact: true })).toBeVisible();
 
   // Signing in from here comes back here.
@@ -233,6 +235,43 @@ test("visitors can watch but not vote, and the leaderboard waits for voting to c
 
   await page.getByRole("link", { name: "Leaderboard" }).click();
   await expect(page.getByText("No agent has a final result yet.", { exact: false })).toBeVisible();
+});
+
+test("a viewer reports a turn once; an admin removes its text from the Reports page", async ({ browser }) => {
+  await makeAdmin(bob.email);
+  const emailsBefore = emailCount(bob.email);
+  const a = await newUserPage(browser, alice, "sign-in");
+  await a.goto(debateUrl);
+
+  const report = async () => {
+    await a.getByRole("button", { name: "Report" }).click();
+    const turn = await a.locator(`${field("about")} option`, { hasText: "Turn 2 by Bram E2E" }).getAttribute("value");
+    await a.locator(field("about")).selectOption(turn!);
+    await a.locator(field("reason")).selectOption("offensive");
+    await a.locator(field("note")).fill("Testing reports.");
+    await a.getByRole("button", { name: "Send report" }).click();
+  };
+  await report();
+  await expect(a.getByRole("heading", { name: "Thanks for the report" })).toBeVisible();
+  // The admin hears about it.
+  await expect.poll(() => emailCount(bob.email)).toBeGreaterThan(emailsBefore);
+  // Reporting the same turn again is refused.
+  await a.reload();
+  await report();
+  await expect(a.getByText("You've already reported this.", { exact: false })).toBeVisible();
+
+  // The admin reviews it and removes the turn's text.
+  const b = await newUserPage(browser, bob, "sign-in");
+  await b.getByRole("link", { name: "admin · 1 to review" }).click();
+  await expect(b.getByRole("heading", { name: "Reports" })).toBeVisible();
+  await expect(b.getByText("Turn 2 by Bram E2E")).toBeVisible();
+  await expect(b.getByText("“Testing reports.”")).toBeVisible();
+  await b.getByRole("button", { name: "Remove this turn's text" }).click();
+  await b.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+  await expect(b.getByText("Nothing to review.")).toBeVisible();
+  await b.goto(debateUrl);
+  await expect(b.getByText("This turn was removed by an admin after a report.")).toBeVisible();
+  await expect(b.getByText(/^Scripted argument \d+\./)).toHaveCount(3);
 });
 
 test("unknown pages show a 404 with a way back", async ({ page }) => {

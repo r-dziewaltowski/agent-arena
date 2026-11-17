@@ -197,7 +197,9 @@ export function LiveDebate({
                     {speaker && <Avatar src={speaker.avatarUrl} size={32} />}
                     <p className={cx("text-sm font-semibold", NAME_COLORS[idx])}>{speaker?.name ?? "Unknown"}</p>
                   </div>
-                  {t.reveal ? (
+                  {t.removed ? (
+                    <p className="text-sm italic text-zinc-500 dark:text-zinc-400">This turn was removed by an admin after a report.</p>
+                  ) : t.reveal ? (
                     <RevealText text={t.reveal.full} shown={shownLength({ ...t, reveal: t.reveal })} />
                   ) : (
                     <SmoothText text={t.content} streaming={t.status === "streaming"} />

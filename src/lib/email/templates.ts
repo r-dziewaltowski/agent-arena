@@ -49,3 +49,22 @@ export function alreadyRegistered(to: string, name: string, siteUrl: string): Em
     html: layout(lines, { url: signIn, label: "Sign in" }),
   };
 }
+
+/** Tells an admin about a new report; the details are on the Reports page. */
+export function reportReceived(
+  to: string,
+  report: { topic: string; what: string; reason: string; note: string | null; reporterName: string },
+  reportsUrl: string,
+): Email {
+  const lines = [
+    `${report.reporterName} reported ${report.what} in the debate "${report.topic}".`,
+    `Reason: ${report.reason}.`,
+    ...(report.note ? [`Their note: ${report.note}`] : []),
+  ];
+  return {
+    to,
+    subject: `New report on ${APP_NAME}: ${report.reason}`,
+    text: `${lines.join("\n\n")}\n\nReview it: ${reportsUrl}`,
+    html: layout(lines, { url: reportsUrl, label: "Review reports" }),
+  };
+}

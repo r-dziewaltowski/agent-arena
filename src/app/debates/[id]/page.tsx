@@ -9,13 +9,15 @@ import { AutoRefresh } from "@/components/debates/auto-refresh";
 import { Countdown } from "@/components/debates/countdown";
 import { LiveDebate } from "@/components/debates/live-debate";
 import { EnterSlotForm, StartForm } from "@/components/debates/lobby-forms";
+import { ReportButton, type ReportChoice } from "@/components/debates/report-button";
 import { StatusBadge } from "@/components/debates/status-badge";
+import { AuthLink } from "@/components/auth-links";
 import { VotePanel } from "@/components/debates/vote-panel";
 import { FailureNotice } from "@/components/debates/failure-notice";
 import { Badge, Button, ButtonLink, Card, Notice } from "@/components/ui";
 import { modelLabel } from "@/lib/ai/model-options";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
-import { loadDebateView, type DebateRow, type SlotEntry } from "@/lib/debate-view";
+import { loadDebateView, type DebateRow, type SlotEntry, type TurnView } from "@/lib/debate-view";
 import { agentsOf } from "@/lib/queries";
 
 export default function DebatePage(props: PageProps<"/debates/[id]">) {
@@ -48,6 +50,15 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={debate.status} />
           <span className="text-xs text-zinc-500 dark:text-zinc-400">created by {creatorName}</span>
+          <span className="ml-auto">
+            {me ? (
+              <ReportButton debateId={debate.id} choices={reportChoices(slots, turns)} />
+            ) : (
+              <AuthLink to="/sign-in" className="text-xs text-zinc-500 hover:underline dark:text-zinc-400">
+                Sign in to report a problem
+              </AuthLink>
+            )}
+          </span>
         </div>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">{debate.topic}</h1>
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -125,6 +136,22 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
       )}
     </div>
   );
+}
+
+/** What the Report form offers: the topic, each turn shown so far, and each agent. */
+function reportChoices(slots: SlotEntry[], turns: TurnView[]): ReportChoice[] {
+  const nameOf = new Map(slots.map((s) => [s.participantId, s.name]));
+  const excerpt = (text: string) => (text.length > 50 ? `${text.slice(0, 50).trimEnd()}…` : text);
+  return [
+    { value: "topic", label: "The topic" },
+    ...turns
+      .filter((t) => !t.removed && t.content)
+      .map((t) => ({
+        value: `turn:${t.id}`,
+        label: `Turn ${t.seq} by ${nameOf.get(t.participantId ?? "") ?? "an agent"}: “${excerpt(t.content)}”`,
+      })),
+    ...slots.map((s) => ({ value: `agent:${s.participantId}`, label: `The agent ${s.name} (its name or picture)` })),
+  ];
 }
 
 function Participants({ slots }: { slots: SlotEntry[] }) {

@@ -92,6 +92,7 @@ describe("toTurnView", () => {
     revealStartedAt: T0,
     revealEndsAt: T0 + 4500,
     audioMarks: null,
+    removedAt: null,
     createdAt: T0,
     updatedAt: T0,
   };

@@ -29,6 +29,9 @@ export default function PrivacyPage() {
               so sessions can be checked and ended.
             </li>
             <li>
+              <strong>Reports you send</strong>: what you reported, why, your note and who you are. Only admins see them.
+            </li>
+            <li>
               <strong>What you create</strong>: your agents (with any picture you upload for one), the debates you start or
               enter, and your votes. Pictures are cropped and shrunk in your browser before they&apos;re sent, which also
               removes hidden details such as where a photo was taken.

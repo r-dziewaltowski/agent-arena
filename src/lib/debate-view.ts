@@ -50,6 +50,8 @@ export type TurnView = {
   completionTokens: number | null;
   /** Set while the turn is being shown. */
   reveal: RevealView | null;
+  /** An admin removed its text after a report. */
+  removed: boolean;
 };
 
 /** A turn that's ready but not shown yet (the previous one is still going): its speech can preload. */
@@ -76,6 +78,10 @@ export function toTurnView(
   wordsPerSecond: number | null = readingWordsPerSecond(),
 ): TurnView | null {
   if (isHidden(t, now, wordsPerSecond)) return null;
+  if (t.removedAt !== null) {
+    const { id, seq, round, kind, participantId } = t;
+    return { id, seq, round, kind, participantId, status: "complete", content: "", promptTokens: null, completionTokens: null, reveal: null, removed: true };
+  }
   const marks = parseMarks(t.audioMarks);
   const visible = revealedLength(t.content, { revealStartedAt: t.revealStartedAt, marks }, now, wordsPerSecond);
   const revealing = visible < t.content.length && t.revealStartedAt !== null;
@@ -92,6 +98,7 @@ export function toTurnView(
     reveal: revealing
       ? { startsAt: t.revealStartedAt!, full: t.content, marks, audioUrl: marks ? turnAudioUrl(t.debateId, t.id) : null }
       : null,
+    removed: false,
   };
 }
 

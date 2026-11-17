@@ -153,6 +153,8 @@ export const turns = sqliteTable(
     revealEndsAt: integer("reveal_ends_at"),
     /** JSON `[ms, chars][]` keeping the text in step with the turn's audio; null without audio. */
     audioMarks: text("audio_marks"),
+    /** Set when an admin removed the turn's text after a report: it shows as removed. */
+    removedAt: integer("removed_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

@@ -297,10 +297,9 @@ function useSpeech({
   const sync = useCallback(() => {
     const turn = currentRef.current;
     let el = audioRef.current;
-    if (!turn) {
-      el?.pause();
-      return;
-    }
+    // Between turns: let the last one's speech finish. It can run a moment behind the schedule (it
+    // started after loading), and pausing it here would cut off its last words.
+    if (!turn) return;
     if (!el) {
       el = new Audio();
       el.preload = "auto";

@@ -81,9 +81,11 @@ export const MODEL_CATALOG: ModelEntry[] = [
     isDefault: true,
   },
   // Free models on the agent owner's own OpenRouter account: its free daily requests, no credit
-  // needed. Picked 2026-11-16 by measuring (npm run models:openrouter): both answered every request
-  // with reasoning "none"; at "minimal" Super spent the whole cap thinking. Gemma 4, ERNIE 5.5 and
-  // Ling 3.2 were refused for lack of free capacity. OpenRouter's free list changes often: retest.
+  // needed. Picked by measuring (npm run models:openrouter) with reasoning "none": the two below
+  // answered every request on 2026-11-16 (at "minimal" Super spent the whole cap thinking), and
+  // Lightning 6 of 6 in 1-4 s on 2026-11-17. Left out on 2026-11-17: Gemma 4 31B (0 of 5, refused),
+  // ERNIE 5.5 Flash (reasoning can't be switched off and ate the cap), Ling 3.2 Flash (2 of 3,
+  // 6-13 s), Inkling 2 Small ("agentic harnesses" only). OpenRouter's free list changes often: retest.
   {
     provider: "openrouter",
     id: "nvidia/nemotron-3-ultra-550b-a55b:free",
@@ -99,6 +101,16 @@ export const MODEL_CATALOG: ModelEntry[] = [
     id: "nvidia/nemotron-3.5-super-vl:free",
     name: "Nemotron 3.5 Super",
     description: "NVIDIA's mid-size model. Quick and direct.",
+    tier: "free",
+    supportsStop: false,
+    openRouterReasoning: "none",
+    offered: true,
+  },
+  {
+    provider: "openrouter",
+    id: "nvidia/nemotron-3.5-lightning:free",
+    name: "Nemotron 3.5 Lightning",
+    description: "NVIDIA's fastest model. Short, punchy replies.",
     tier: "free",
     supportsStop: false,
     openRouterReasoning: "none",

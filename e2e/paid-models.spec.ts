@@ -73,6 +73,7 @@ test("paid models are offered only after connecting OpenRouter", async ({ browse
   await expect(carolPage.locator('optgroup[label="Free, on your OpenRouter account (your own daily limit)"] option')).toHaveText([
     "Nemotron 3 Ultra",
     "Nemotron 3.5 Super",
+    "Nemotron 3.5 Lightning",
   ]);
   await carolPage.locator(field("model")).selectOption({ label: "Claude Haiku 5.5" });
   await expect(carolPage.getByText(/About \$0\.000\d+ a turn\./)).toBeVisible();

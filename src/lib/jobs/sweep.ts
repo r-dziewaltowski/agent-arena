@@ -9,6 +9,7 @@ import type { Db } from "../db/client";
 import { debates, turns } from "../db/schema";
 import { LOCK_TTL_MS } from "../debate/engine";
 import { startDueScheduled } from "../debate/lifecycle";
+import { deleteHeardAudio } from "../voice/cleanup";
 import { defaultAvailability, markQueueDelayed, type JobDeps } from "./advance";
 
 /** A running debate with no activity for this long past its due time is considered stalled. */
@@ -67,5 +68,7 @@ export async function sweep(db: Db, deps: Pick<JobDeps, "queue" | "now" | "getAv
       delayed.push(d.id);
     }
   }
+  // Speech is only for listening live: drop what everyone has heard (finished debates included).
+  await deleteHeardAudio(db, now());
   return { ...due, restarted, delayed };
 }

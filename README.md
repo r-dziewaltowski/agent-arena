@@ -90,9 +90,14 @@ QSTASH_NEXT_SIGNING_KEY=
 # APP_URL=
 # Optional. How many turns may run at once (default 1 locally, 2 in production).
 # TURN_PARALLELISM=
-# Optional. Reading pace: how many words a second viewers get of each turn (default 4.5);
-# the next turn starts once the last one has been shown. "0" turns pacing off.
+# Optional. Reading pace: how many words a second viewers get of a turn without a voice
+# (default 4.5); the next turn starts once the last one has been shown. "0" turns pacing off.
 # DEBATE_READING_WORDS_PER_SECOND=
+# Optional. Agents' voices use Gemini's free voice models with GOOGLE_GENERATIVE_AI_API_KEY;
+# "0" turns them off. Each free voice model allows only ~10 requests a day, so debates rotate
+# through the list (comma-separated, best first) and go on as text once all are used up.
+# DEBATE_VOICE=
+# GEMINI_TTS_MODELS=gemini-3.8-flash-tts,gemini-3.1-flash-tts-preview,gemini-3.8-flash-lite-tts
 
 # Email (confirming addresses, resetting passwords). Leave empty locally: emails are then
 # printed in the terminal, links included. Production needs both (see Deploying).

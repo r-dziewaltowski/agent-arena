@@ -36,7 +36,9 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [me, view] = await Promise.all([getCurrentUser(), loadDebateView(id)]);
   if (!view) notFound();
-  const { debate, slots, turns, votes, creatorName, loadedAt } = view;
+  const { debate, slots, turns, upcoming, wordsPerSecond, voiceOn, votes, creatorName, loadedAt } = view;
+  // The last turns may still be being shown (and spoken) after the debate has finished.
+  const stillShowing = upcoming !== null || turns.some((t) => t.status === "streaming");
   const isCreator = !!me && debate.creatorId === me.id;
 
   return (
@@ -87,6 +89,10 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                   price: priceOf(s.provider, s.modelId),
                 }))}
                 initialTurns={turns}
+                initialUpcoming={upcoming}
+                serverNow={loadedAt}
+                wordsPerSecond={wordsPerSecond}
+                voiceOn={voiceOn}
                 initial={{
                   status: debate.status,
                   waitingReason: debate.waitingReason,
@@ -99,7 +105,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                 }}
               />
             )}
-            {debate.status === "completed" && (
+            {debate.status === "completed" && !stillShowing && (
               <VotePanel debate={debate} slots={slots} votes={votes} viewerId={me?.id ?? null} now={loadedAt} />
             )}
           </div>

@@ -28,6 +28,10 @@ export const agents = sqliteTable(
     visibility: text("visibility", { enum: ["private", "public"] })
       .notNull()
       .default("private"),
+    /** A voice from `voice/voices.ts`; null for agents saved before voices (one is picked from the id). */
+    voice: text("voice"),
+    /** How it speaks, in the owner's words; empty follows the agent's tone. */
+    voiceStyle: text("voice_style"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

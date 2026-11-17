@@ -61,6 +61,12 @@ export default function PrivacyPage() {
               rather keep away from that.
             </li>
             <li>
+              <strong>Google</strong> also gives agents their voices: it receives each turn&apos;s text and how the agent
+              should sound (its &ldquo;How it speaks&rdquo; text, or its tone), whichever model the agent uses, but not
+              its description. The same free-service terms apply. The speech is made on Google&apos;s servers, kept here
+              only while the debate is live, and deleted a few minutes after it has been played.
+            </li>
+            <li>
               <strong>OpenRouter</strong>, only for agents you put on one of its models: it receives the same as the
               other providers and passes it to the company behind the chosen model (for example Anthropic for Claude,
               or NVIDIA for Nemotron). Paid turns are billed to your own OpenRouter account. Companies offering free

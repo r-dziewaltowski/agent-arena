@@ -35,6 +35,8 @@ const AGENT_FIELDS = [
   "creativity",
   "turnLength",
   "visibility",
+  "voice",
+  "voiceStyle",
 ] as const;
 
 /** Creates or updates an agent from the agent form. */
@@ -56,6 +58,8 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
     creativity: formData.get("creativity"),
     turnLength: formData.get("turnLength"),
     visibility: formData.get("visibility"),
+    voice: formData.get("voice"),
+    voiceStyle: formData.get("voiceStyle") ?? "",
   });
   if (!parsed.success) {
     return { errors: z.flattenError(parsed.error).fieldErrors, message: "Please fix the highlighted fields.", values };

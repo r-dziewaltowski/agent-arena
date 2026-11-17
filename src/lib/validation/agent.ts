@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CREATIVITY_LEVELS, CUSTOM_TRAIT_MAX_LENGTH, STANCES, TURN_LENGTHS } from "../debate/traits";
+import { VOICE_NAMES, VOICE_STYLE_MAX_LENGTH } from "../voice/voices";
 
 /** Style and tone: a preset key or the owner's own short text. */
 const freeTrait = (label: string) =>
@@ -26,6 +27,15 @@ export const agentSchema = z.object({
   creativity: choice(CREATIVITY_LEVELS, "Pick a creativity level.").default("balanced"),
   turnLength: choice(TURN_LENGTHS, "Pick a turn length.").default("medium"),
   visibility: choice(["private", "public"] as const, "Pick private or public.").default("private"),
+  voice: choice(VOICE_NAMES as unknown as [string, ...string[]], "Pick one of the voices."),
+  /** Empty: the voice follows the agent's tone. */
+  voiceStyle: z
+    .string()
+    .trim()
+    .max(VOICE_STYLE_MAX_LENGTH, `Keep how it speaks under ${VOICE_STYLE_MAX_LENGTH} characters.`)
+    .transform((s) => s || null)
+    .nullable()
+    .default(null),
 });
 
 export type AgentInput = z.input<typeof agentSchema>;

@@ -9,17 +9,23 @@ import {
   type Provider,
 } from "../ai/provider";
 import type { Db } from "../db/client";
-import { debateParticipants, debates, turns } from "../db/schema";
+import { debateParticipants, debates, turnAudio, turns } from "../db/schema";
 import { keyRefusalReason, loadKey, markKeyFailed, markKeyUsed, NOT_CONNECTED_REASON } from "../openrouter";
+import { deleteHeardAudio } from "../voice/cleanup";
+import { defaultSpeechMaker, type Speech, type SpeechMaker } from "../voice/speech";
+import { voiceFor } from "../voice/voices";
 import type { Creativity } from "./traits";
 import { publishChunk } from "./broadcast";
 import { votingClosesAtFor } from "./lifecycle";
 import { buildPrompt, cleanTurnText, trimToLastSentence, turnKindFor, type Speaker } from "./prompt";
-import { nextTurnAt, readingWordsPerSecond } from "./pacing";
+import { nextPrepareAt, PAUSE_BETWEEN_TURNS_MS, readingWordsPerSecond, revealDurationMs, turnRevealEndsAt } from "./pacing";
 import { maybeFoldSummary } from "./summarize";
 
-/** A lock older than this is considered abandoned (e.g. the function was killed mid-turn). */
-export const LOCK_TTL_MS = 90_000;
+/**
+ * A lock older than this is considered abandoned (e.g. the function was killed mid-turn). Covers a
+ * slow model's first words (up to 2 min with a cold local Ollama) plus making the turn's speech.
+ */
+export const LOCK_TTL_MS = 180_000;
 /** Bad turns are retried this many times before the debate fails. */
 export const MAX_BAD_TURN_RETRIES = 2;
 const BAD_TURN_RETRY_DELAY_MS = 5_000;
@@ -32,8 +38,21 @@ const MAX_RETRY_AFTER_MS = 24 * 60 * 60_000;
 
 export type StepOutcome =
   | { kind: "skipped" }
-  /** `nextTurnAt`: when the next turn may start (viewers are still reading this one), or null for now. */
-  | { kind: "turn"; turnId: string; seq: number; speaker: string; text: string; debateCompleted: boolean; nextTurnAt: number | null }
+  /**
+   * `nextTurnAt`: when to prepare the next turn (shortly before viewers reach the end of this one),
+   * or null for now. `revealEndsAt`: when this turn will have been shown. `spoken`: it has speech.
+   */
+  | {
+      kind: "turn";
+      turnId: string;
+      seq: number;
+      speaker: string;
+      text: string;
+      debateCompleted: boolean;
+      nextTurnAt: number | null;
+      revealEndsAt: number | null;
+      spoken: boolean;
+    }
   /** The speaker's owner's paid-model key stopped working: that agent is skipped from now on. */
   | { kind: "silenced"; speaker: string; reason: string }
   /** Only silenced agents were left to speak, so the debate ended. */
@@ -55,6 +74,8 @@ export type StepOptions = {
   chunkTimeoutMs?: number;
   /** Reading pace (see `pacing.ts`); null for none. Defaults to the configured pace. */
   wordsPerSecond?: number | null;
+  /** Makes a turn's speech; null for none. Defaults to Gemini when configured. Only with pacing. */
+  speak?: SpeechMaker | null;
 };
 
 /** Delay before the next attempt after `attempts` consecutive "model unreachable" errors. */
@@ -97,6 +118,7 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
 
     // Any streaming row is left over from a crash: we hold the lock, so nobody else is writing it.
     await db.delete(turns).where(and(eq(turns.debateId, debateId), eq(turns.status, "streaming")));
+    await deleteHeardAudio(db, t0);
     const done = await db.select().from(turns).where(eq(turns.debateId, debateId)).orderBy(asc(turns.seq));
 
     let round = debate.currentRound;
@@ -194,9 +216,8 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
     });
     opts.onTurnStart?.({ speaker: speaker.name, round, rounds: debate.rounds, kind, seq });
 
-    // Viewers get the text at reading pace from its first words (pacing.ts).
+    // Viewers get the turn once it's written and spoken, at the pace of its speech or reading (pacing.ts).
     const pace = opts.wordsPerSecond === undefined ? readingWordsPerSecond() : opts.wordsPerSecond;
-    let revealStartedAt: number | null = null;
 
     // Generate.
     let streamError: unknown;
@@ -229,10 +250,6 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       let lastWrite = now();
       for await (const delta of result.textStream) {
         text += delta;
-        if (pace !== null && revealStartedAt === null && text.trim()) {
-          revealStartedAt = now();
-          await db.update(turns).set({ content: text, revealStartedAt, updatedAt: now() }).where(eq(turns.id, turnId));
-        }
         opts.onDelta?.(delta);
         publishChunk(debateId, delta);
         if (now() - lastWrite >= interval) {
@@ -316,8 +333,32 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       }
     } while (participants[nextIndex]?.silencedAt && nextRound <= debate.rounds);
     const completed = nextRound > debate.rounds;
+
+    // The turn's speech, when voices are on. Without it (Gemini down, its daily limit reached) the
+    // turn is shown as text at reading pace: a debate never waits for its voice.
+    const speak = pace === null ? null : opts.speak === undefined ? defaultSpeechMaker() : opts.speak;
+    let speech: Speech | null = null;
+    if (speak) {
+      try {
+        speech = await speak({
+          text: cleaned,
+          voice: voiceFor(speakerRow.agentId ?? speakerRow.id, speakerRow.voice),
+          direction: speakerRow.voiceStyle ?? "",
+          model: debate.voiceModel,
+        });
+      } catch (err) {
+        console.warn(`Debate ${debateId}, turn ${seq}: no speech, shown as text only. ${describeError(err)}`);
+      }
+    }
+
+    // Viewers get it once the previous turn has been shown, after a short pause.
     const finishedAt = now();
-    const nextAt = completed ? null : nextTurnAt(cleaned, revealStartedAt, finishedAt, pace);
+    const previous = done.filter((t) => t.kind !== "summary").at(-1);
+    const previousEnd = previous ? turnRevealEndsAt(previous, pace) : null;
+    const revealStartedAt = pace === null ? null : Math.max(finishedAt, previousEnd === null ? 0 : previousEnd + PAUSE_BETWEEN_TURNS_MS);
+    const marks = speech?.marks ?? null;
+    const revealEndsAt = revealStartedAt === null || pace === null ? null : revealStartedAt + revealDurationMs(cleaned, pace, marks);
+    const nextAt = completed ? null : nextPrepareAt(revealEndsAt, finishedAt);
 
     await db.transaction(async (tx) => {
       await tx
@@ -329,9 +370,21 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
           completionTokens,
           latencyMs: finishedAt - started,
           finishReason: finishReason ?? null,
+          revealStartedAt,
+          revealEndsAt,
+          audioMarks: marks ? JSON.stringify(marks) : null,
           updatedAt: finishedAt,
         })
         .where(eq(turns.id, turnId!));
+      if (speech) {
+        await tx.insert(turnAudio).values({
+          turnId: turnId!,
+          debateId,
+          mimeType: speech.mimeType,
+          data: Buffer.from(speech.audio),
+          createdAt: finishedAt,
+        });
+      }
       await tx
         .update(debates)
         .set({
@@ -341,7 +394,8 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
           totalCompletionTokens: debate.totalCompletionTokens + completionTokens,
           retryCount: 0,
           waitAttempts: 0,
-          // While the turn is still being read, the next one waits (no notice: nothing is wrong).
+          voiceModel: speech?.nextModel ?? debate.voiceModel,
+          // The next turn is prepared shortly before this one has been shown (no notice: nothing is wrong).
           nextAttemptAt: nextAt,
           waitingReason: null,
           ...(completed
@@ -364,7 +418,17 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       await maybeFoldSummary(db, debateId, { resolveModel: resolve, ...summarizer });
     }
 
-    return { kind: "turn", turnId: turnId!, seq, speaker: speaker.name, text: cleaned, debateCompleted: completed, nextTurnAt: nextAt };
+    return {
+      kind: "turn",
+      turnId: turnId!,
+      seq,
+      speaker: speaker.name,
+      text: cleaned,
+      debateCompleted: completed,
+      nextTurnAt: nextAt,
+      revealEndsAt,
+      spoken: speech !== null,
+    };
   } finally {
     await db
       .update(debates)

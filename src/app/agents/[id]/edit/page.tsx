@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AgentForm } from "@/components/agents/agent-form";
+import { voiceFor } from "@/lib/voice/voices";
 import { Card, Notice, PageHeader } from "@/components/ui";
 import { getModelOptions, isRetired, modelLabel } from "@/lib/ai/model-options";
 import { requireUser } from "@/lib/auth/session";
@@ -53,6 +54,8 @@ async function EditAgent({ params }: { params: Promise<{ id: string }> }) {
             creativity: agent.creativity,
             turnLength: agent.turnLength,
             visibility: agent.visibility,
+            voice: voiceFor(agent.id, agent.voice),
+            voiceStyle: agent.voiceStyle ?? "",
           }}
         />
       </Card>

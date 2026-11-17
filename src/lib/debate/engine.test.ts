@@ -3,7 +3,10 @@ import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "../db/client";
-import { debateParticipants, debates, turns } from "../db/schema";
+import { debateParticipants, debates, turnAudio, turns } from "../db/schema";
+import { AUDIO_KEPT_AFTER_SHOWN_MS } from "../voice/cleanup";
+import { parseMarks, type Mark } from "../voice/marks";
+import type { SpeechMaker, SpeechRequest } from "../voice/speech";
 import { VOTING_DURATIONS } from "../validation/debate";
 import {
   createTestDb,
@@ -17,6 +20,7 @@ import {
 } from "../../test/helpers";
 import {
   isModelUnreachable,
+  LOCK_TTL_MS,
   isRateLimited,
   MAX_BAD_TURN_RETRIES,
   RATE_LIMITED,
@@ -26,7 +30,7 @@ import {
   waitDelayMs,
 } from "./engine";
 import { createDebate, enter, startDebate } from "./lifecycle";
-import { PAUSE_BETWEEN_TURNS_MS } from "./pacing";
+import { PAUSE_BETWEEN_TURNS_MS, PREPARE_AHEAD_MS, SPEECH_PLAYBACK_RATE } from "./pacing";
 
 let db: Db;
 let cleanup: () => void;
@@ -201,7 +205,7 @@ describe("runStep", () => {
     await db.update(debates).set({ lockToken: "other", lockedAt: clock.now() }).where(eq(debates.id, debateId));
     expect(await runStep(db, debateId, opts)).toEqual({ kind: "skipped" });
 
-    clock.advance(91_000);
+    clock.advance(LOCK_TTL_MS + 1_000);
     expect((await runStep(db, debateId, opts)).kind).toBe("turn");
   });
 
@@ -243,41 +247,115 @@ describe("runStep", () => {
 
 describe("reading pace", () => {
   const TEN_WORDS = "One two three four five six seven eight nine ten.";
+  /** 400 words: 80 s at 5 words a second, long enough for the next turn to be prepared ahead. */
+  const LONG = Array.from({ length: 40 }, () => TEN_WORDS).join(" ");
 
   it("runs at full speed with pacing off", async () => {
     const debateId = await startedDebate(2);
     const outcome = await runStep(db, debateId, { resolveModel: resolverFor(scriptedModel([TEN_WORDS])), now: clock.now, wordsPerSecond: null });
-    expect(outcome).toMatchObject({ kind: "turn", nextTurnAt: null });
+    expect(outcome).toMatchObject({ kind: "turn", nextTurnAt: null, revealEndsAt: null });
     expect((await turnsOf(debateId))[0].revealStartedAt).toBeNull();
     expect((await getDebate(debateId)).nextAttemptAt).toBeNull();
   });
 
-  it("waits for a turn to be read before the next one starts", async () => {
+  it("shows a turn at reading pace and prepares the next one shortly before it ends", async () => {
     const debateId = await startedDebate(2);
-    const opts = { resolveModel: resolverFor(scriptedModel([TEN_WORDS])), now: clock.now, wordsPerSecond: 5 };
+    const opts = { resolveModel: resolverFor(scriptedModel([LONG])), now: clock.now, wordsPerSecond: 5, speak: null };
+    const t0 = clock.now();
 
     const outcome = await runStep(db, debateId, opts);
-    const expected = clock.now() + 2_000 + PAUSE_BETWEEN_TURNS_MS; // 10 words at 5 a second, then a pause
-    expect(outcome).toMatchObject({ kind: "turn", nextTurnAt: expected });
-    expect((await turnsOf(debateId))[0].revealStartedAt).toBe(clock.now());
-    expect((await getDebate(debateId)).nextAttemptAt).toBe(expected);
+    const end = t0 + 80_000;
+    const prepareAt = end + PAUSE_BETWEEN_TURNS_MS - PREPARE_AHEAD_MS;
+    expect(outcome).toMatchObject({ kind: "turn", nextTurnAt: prepareAt, revealEndsAt: end, spoken: false });
+    expect((await turnsOf(debateId))[0]).toMatchObject({ revealStartedAt: t0, revealEndsAt: end, audioMarks: null });
+    expect((await getDebate(debateId)).nextAttemptAt).toBe(prepareAt);
     expect((await getDebate(debateId)).waitingReason).toBeNull(); // nothing is wrong: no notice
 
-    // A message arriving early does nothing; on time, the next turn runs.
+    // A message arriving early does nothing; on time, the next turn is written but held back until
+    // the first has been shown, plus a pause.
     expect(await runStep(db, debateId, opts)).toEqual({ kind: "skipped" });
-    clock.set(expected);
+    clock.set(prepareAt);
     expect(await runStep(db, debateId, opts)).toMatchObject({ kind: "turn", seq: 2 });
+    const second = (await turnsOf(debateId))[1];
+    expect(second.revealStartedAt).toBe(end + PAUSE_BETWEEN_TURNS_MS);
+    expect(second.revealEndsAt).toBe(end + PAUSE_BETWEEN_TURNS_MS + 80_000);
   });
 
   it("doesn't hold back the end of a debate", async () => {
     const debateId = await startedDebate(2);
-    const opts = { resolveModel: resolverFor(scriptedModel([TEN_WORDS])), now: clock.now, wordsPerSecond: 5 };
+    const opts = { resolveModel: resolverFor(scriptedModel([TEN_WORDS])), now: clock.now, wordsPerSecond: 5, speak: null };
     for (let i = 0; i < 3; i++) {
       expect(await runStep(db, debateId, opts)).toMatchObject({ kind: "turn", debateCompleted: false });
       clock.advance(10_000);
     }
     expect(await runStep(db, debateId, opts)).toMatchObject({ kind: "turn", debateCompleted: true, nextTurnAt: null });
     expect((await getDebate(debateId)).status).toBe("completed");
+  });
+});
+
+describe("speech", () => {
+  const TEXT = "Cars must go. The data is clear.";
+  const marks: Mark[] = [
+    [0, 0],
+    [6000, TEXT.length],
+  ];
+  const speaking = (model = "gemini-a") => {
+    const calls: SpeechRequest[] = [];
+    const speak: SpeechMaker = async (request) => {
+      calls.push(request);
+      return { audio: new Uint8Array([1, 2, 3]), mimeType: "audio/mpeg", durationMs: 6000, marks, model, nextModel: model };
+    };
+    return { speak, calls };
+  };
+
+  it("gives a turn its agent's voice and times it by the speech", async () => {
+    const debateId = await startedDebate(2);
+    const { speak, calls } = speaking();
+    const t0 = clock.now();
+    const outcome = await runStep(db, debateId, { resolveModel: resolverFor(scriptedModel([TEXT])), now: clock.now, wordsPerSecond: 5, speak });
+
+    expect(outcome).toMatchObject({ kind: "turn", spoken: true, revealEndsAt: t0 + Math.ceil(6000 / SPEECH_PLAYBACK_RATE) });
+    const [ada] = await db.select().from(debateParticipants).where(eq(debateParticipants.debateId, debateId)).orderBy(asc(debateParticipants.position));
+    expect(calls[0]).toMatchObject({ text: TEXT, voice: ada.voice, direction: ada.voiceStyle, model: null });
+    const [turn] = await turnsOf(debateId);
+    expect(parseMarks(turn.audioMarks)).toEqual(marks);
+    const [audio] = await db.select().from(turnAudio).where(eq(turnAudio.turnId, turn.id));
+    expect([...audio.data]).toEqual([1, 2, 3]);
+    expect((await getDebate(debateId)).voiceModel).toBe("gemini-a");
+  });
+
+  it("keeps the debate on its voice model", async () => {
+    const debateId = await startedDebate(2);
+    await db.update(debates).set({ voiceModel: "gemini-b" }).where(eq(debates.id, debateId));
+    const { speak, calls } = speaking("gemini-b");
+    await runStep(db, debateId, { resolveModel: resolverFor(scriptedModel([TEXT])), now: clock.now, wordsPerSecond: 5, speak });
+    expect(calls[0].model).toBe("gemini-b");
+  });
+
+  it("goes ahead as text when there's no speech (Gemini down or its limits used up)", async () => {
+    const debateId = await startedDebate(2);
+    const speak: SpeechMaker = async () => {
+      throw new Error("quota");
+    };
+    const outcome = await runStep(db, debateId, { resolveModel: resolverFor(scriptedModel([TEXT])), now: clock.now, wordsPerSecond: 5, speak });
+    expect(outcome).toMatchObject({ kind: "turn", spoken: false });
+    expect((await turnsOf(debateId))[0].audioMarks).toBeNull();
+    expect(await db.select().from(turnAudio)).toHaveLength(0);
+  });
+
+  it("deletes speech once everyone has heard it", async () => {
+    const debateId = await startedDebate(2);
+    const { speak } = speaking();
+    const opts = { resolveModel: resolverFor(scriptedModel([TEXT])), now: clock.now, wordsPerSecond: 5, speak };
+    await runStep(db, debateId, opts);
+    clock.advance(10_000);
+    await runStep(db, debateId, opts);
+    expect(await db.select().from(turnAudio)).toHaveLength(2); // the first turn ended only just now
+    clock.advance(AUDIO_KEPT_AFTER_SHOWN_MS + 10_000); // past both turns' ends
+    await runStep(db, debateId, opts);
+    const kept = await db.select({ turnId: turnAudio.turnId }).from(turnAudio);
+    const seqs = (await turnsOf(debateId)).filter((t) => kept.some((k) => k.turnId === t.id)).map((t) => t.seq);
+    expect(seqs).toEqual([3]);
   });
 });
 

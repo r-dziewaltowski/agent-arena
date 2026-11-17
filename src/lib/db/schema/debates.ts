@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { agents } from "./agents";
 import { user } from "./auth";
 
@@ -51,6 +51,12 @@ export const debates = sqliteTable(
     waitAttempts: integer("wait_attempts").notNull().default(0),
     nextAttemptAt: integer("next_attempt_at"),
     waitingReason: text("waiting_reason"),
+    /**
+     * The Gemini voice model this debate speaks with (see `voice/speech.ts`): chosen at its first
+     * spoken turn and kept, so voices sound the same throughout; changed only when its free daily
+     * limit runs out. Null until then.
+     */
+    voiceModel: text("voice_model"),
     errorMessage: text("error_message"),
 
     createdAt: integer("created_at").notNull(),
@@ -97,6 +103,9 @@ export const debateParticipants = sqliteTable(
     maxOutputTokens: integer("max_output_tokens"),
     /** The agent's chosen model when it was retired and the provider default ran instead. */
     modelFallbackFrom: text("model_fallback_from"),
+    voice: text("voice"),
+    /** The direction its speech is made with (the owner's own, or one derived from the tone). */
+    voiceStyle: text("voice_style"),
     /**
      * Set when this agent can no longer speak because its owner's paid-model key stopped working
      * (or was disconnected); its remaining turns are skipped and the debate carries on.
@@ -135,12 +144,37 @@ export const turns = sqliteTable(
     latencyMs: integer("latency_ms"),
     finishReason: text("finish_reason"),
     /**
-     * When the turn's first words arrived: viewers get its text at reading pace from this moment
-     * (see `pacing.ts`). Null: shown as fast as it's written (pacing off, or older turns).
+     * When viewers start getting the turn (see `pacing.ts`): once it's written and its speech is
+     * ready, and not before the previous turn has been shown, so it can lie in the future for a turn
+     * prepared ahead. Null: shown as fast as it's written (pacing off).
      */
     revealStartedAt: integer("reveal_started_at"),
+    /** When the turn will have been fully shown (and spoken). Null for turns from before voices. */
+    revealEndsAt: integer("reveal_ends_at"),
+    /** JSON `[ms, chars][]` keeping the text in step with the turn's audio; null without audio. */
+    audioMarks: text("audio_marks"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (t) => [uniqueIndex("turns_debate_seq_uq").on(t.debateId, t.seq)],
+);
+
+/**
+ * A turn's speech, kept only while the debate is live: voice enhances watching a debate, and
+ * finished debates are read as text. Deleted once the debate's last turn has been shown.
+ */
+export const turnAudio = sqliteTable(
+  "turn_audio",
+  {
+    turnId: text("turn_id")
+      .primaryKey()
+      .references(() => turns.id, { onDelete: "cascade" }),
+    debateId: text("debate_id")
+      .notNull()
+      .references(() => debates.id, { onDelete: "cascade" }),
+    mimeType: text("mime_type").notNull(),
+    data: blob("data", { mode: "buffer" }).notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("turn_audio_debate_idx").on(t.debateId)],
 );

@@ -5,7 +5,7 @@ import type { Db } from "../db/client";
 import { debates, turns } from "../db/schema";
 import { LOCK_TTL_MS } from "../debate/engine";
 import { createDebate, enter, startDebate } from "../debate/lifecycle";
-import { PAUSE_BETWEEN_TURNS_MS } from "../debate/pacing";
+import { PAUSE_BETWEEN_TURNS_MS, PREPARE_AHEAD_MS } from "../debate/pacing";
 import {
   createTestDb,
   resolverFor,
@@ -143,11 +143,13 @@ describe("advanceDebate", () => {
     expect(q.messages).toEqual([]);
   });
 
-  it("queues the next turn for when the last one has been read", async () => {
+  it("queues the next turn to be prepared shortly before the last one has been shown", async () => {
     const id = await manualDebate();
     await startDebate(db, { debateId: id, userId: "alice" }, clock.now());
-    const result = await advanceDebate(db, id, { ...deps(scriptedModel(["One two three four five six seven eight nine."])), wordsPerSecond: 3 });
-    const at = clock.now() + 3_000 + PAUSE_BETWEEN_TURNS_MS;
+    // 300 words at 3 a second: shown over 100 s.
+    const long = Array.from({ length: 30 }, () => "One two three four five six seven eight nine ten.").join(" ");
+    const result = await advanceDebate(db, id, { ...deps(scriptedModel([long])), wordsPerSecond: 3, speak: null });
+    const at = clock.now() + 100_000 + PAUSE_BETWEEN_TURNS_MS - PREPARE_AHEAD_MS;
     expect(result).toMatchObject({ kind: "step", outcome: { kind: "turn", seq: 1 }, requeuedFor: at });
     expect(q.messages).toEqual([{ debateId: id, at }]);
   });

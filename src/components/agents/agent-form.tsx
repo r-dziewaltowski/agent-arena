@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import { saveAgent, type AgentFormState } from "@/actions/agents";
 import { Button, Field, inputClass, Notice, cx } from "@/components/ui";
 import type { ModelGroup } from "@/lib/ai/model-options";
@@ -18,6 +18,7 @@ import {
   TURN_LENGTHS,
   traitLabel,
 } from "@/lib/debate/traits";
+import { isVoice, VOICE_NAMES, VOICE_STYLE_MAX_LENGTH, VOICES, voicePreviewUrl } from "@/lib/voice/voices";
 
 export type AgentFormValues = {
   id?: string;
@@ -31,6 +32,8 @@ export type AgentFormValues = {
   creativity: string;
   turnLength: string;
   visibility: string;
+  voice: string;
+  voiceStyle: string;
 };
 
 export function AgentForm({
@@ -154,6 +157,11 @@ export function AgentForm({
             </option>
           ))}
         </SelectWithHint>
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <VoicePicker defaultValue={val("voice", initial.voice)} error={e.voice} />
+        <VoiceStyleField defaultValue={val("voiceStyle", initial.voiceStyle)} error={e.voiceStyle} />
       </div>
 
       <Segmented
@@ -284,6 +292,104 @@ function TraitPicker({
           autoFocus={!sent[`${name}Choice`] && !initialCustom}
         />
       )}
+    </Field>
+  );
+}
+
+/** The voice: one of Gemini's voices, with a button to hear it. */
+function VoicePicker({ defaultValue, error }: { defaultValue: string; error?: string[] }) {
+  const [voice, setVoice] = useState(isVoice(defaultValue) ? defaultValue : VOICE_NAMES[0]);
+  const [playing, setPlaying] = useState(false);
+  // Samples are made a few a day (the free limit), so some voices may not have one yet.
+  const [missing, setMissing] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => () => audioRef.current?.pause(), []);
+
+  const toggle = () => {
+    if (playing) {
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    const audio = new Audio(voicePreviewUrl(voice));
+    audioRef.current?.pause();
+    audioRef.current = audio;
+    audio.onended = () => setPlaying(false);
+    audio.onerror = () => {
+      setPlaying(false);
+      setMissing(voice);
+    };
+    setPlaying(true);
+    audio.play().catch(() => setPlaying(false));
+  };
+
+  return (
+    <Field
+      label="Voice"
+      error={error}
+      hint={missing === voice ? "There's no sample of this voice yet. It still works in debates." : "How it sounds when people listen to a live debate."}
+    >
+      <div className="flex gap-2">
+        <select
+          name="voice"
+          defaultValue={voice}
+          onChange={(event) => {
+            audioRef.current?.pause();
+            setPlaying(false);
+            setVoice(event.target.value as typeof voice);
+          }}
+          className={inputClass}
+        >
+          {VOICE_NAMES.map((v) => (
+            <option key={v} value={v}>
+              {v} · {VOICES[v]}
+            </option>
+          ))}
+        </select>
+        <Button type="button" variant="secondary" onClick={toggle} aria-label={playing ? "Stop the voice sample" : `Hear ${voice}`} className="shrink-0">
+          {playing ? "Stop" : "Play"}
+        </Button>
+      </div>
+    </Field>
+  );
+}
+
+const VOICE_STYLE_IDEAS = [
+  "Fast-talking and excitable",
+  "Calm, warm and unhurried",
+  "A gravelly old sea captain",
+  "A crisp radio newsreader",
+];
+
+/** How it speaks, in the owner's own words, with a few ideas to start from. */
+function VoiceStyleField({ defaultValue, error }: { defaultValue: string; error?: string[] }) {
+  const [text, setText] = useState(defaultValue);
+  return (
+    <Field
+      label="How it speaks (optional)"
+      error={error}
+      hint="Character, mood, pace or accent, in your own words. Empty: it follows the tone. The text always keeps pace with the voice."
+    >
+      <input
+        name="voiceStyle"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        maxLength={VOICE_STYLE_MAX_LENGTH}
+        placeholder="e.g. a weary professor, dry and slightly sarcastic"
+        className={inputClass}
+      />
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {VOICE_STYLE_IDEAS.map((idea) => (
+          <button
+            key={idea}
+            type="button"
+            onClick={() => setText(idea)}
+            className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-xs text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+          >
+            {idea}
+          </button>
+        ))}
+      </div>
     </Field>
   );
 }

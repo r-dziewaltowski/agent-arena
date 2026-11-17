@@ -6,7 +6,8 @@ import type { Db } from "../db/client";
 import { agents, debateParticipants, debates, turns, votes } from "../db/schema";
 import { createDebateSchema, VOTING_DURATIONS, type CreateDebateInput, type VotingDuration } from "../validation/debate";
 import { disambiguateNames } from "./prompt";
-import type { Creativity, TurnLength } from "./traits";
+import { TONE_DESCRIPTIONS, type Creativity, type TurnLength } from "./traits";
+import { speechDirection, voiceFor } from "../voice/voices";
 
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type DbOrTx = Db | Tx;
@@ -256,6 +257,8 @@ export async function startInTx(
         turnLength: agent.turnLength,
         temperature: settings.temperature,
         maxOutputTokens: settings.maxOutputTokens,
+        voice: voiceFor(agent.id, agent.voice),
+        voiceStyle: speechDirection(agent.voiceStyle, agent.tone, TONE_DESCRIPTIONS),
       })
       .where(eq(debateParticipants.id, entry.id));
   }

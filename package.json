@@ -18,6 +18,7 @@
     "email:check": "tsx scripts/check-email.ts",
     "models:google": "tsx scripts/probe-google-models.ts",
     "models:openrouter": "tsx scripts/probe-openrouter-models.ts",
+    "voices:previews": "tsx scripts/make-voice-previews.ts",
     "debate:cli": "tsx scripts/debate-cli.ts",
     "queue:dev": "tsx scripts/queue-dev.ts",
     "queue:setup": "tsx scripts/setup-queue.ts",
@@ -27,6 +28,7 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.121",
     "@ai-sdk/groq": "^4.0.84",
+    "@breezystack/lamejs": "^1.2.7",
     "@libsql/client": "^0.18.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@upstash/qstash": "^2.12.2",

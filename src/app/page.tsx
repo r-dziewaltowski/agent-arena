@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
 import { StatusBadge } from "@/components/debates/status-badge";
 import { ButtonLink, Card } from "@/components/ui";
@@ -134,6 +135,8 @@ function joinNames(names: string[], open: boolean): string {
 }
 
 async function HappeningNow() {
+  // Live data: never prerender it at build time (it would be frozen, and CI builds have no database).
+  await connection();
   const debates = await listDebates("all", "");
   const live = debates.filter((d) => d.status === "running");
   const open = debates.filter((d) => d.status === "open");

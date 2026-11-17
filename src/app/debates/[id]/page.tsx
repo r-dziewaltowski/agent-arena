@@ -3,6 +3,7 @@ import { priceOf } from "@/lib/ai/pricing";
 import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { deleteDebateAction, withdrawAction } from "@/actions/debates";
+import { Avatar } from "@/components/avatar";
 import { ConfirmButton } from "@/components/confirm-button";
 import { AutoRefresh } from "@/components/debates/auto-refresh";
 import { Countdown } from "@/components/debates/countdown";
@@ -85,6 +86,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                 speakers={slots.map((s) => ({
                   participantId: s.participantId,
                   name: s.name,
+                  avatarUrl: s.avatarUrl,
                   position: s.position,
                   price: priceOf(s.provider, s.modelId),
                 }))}
@@ -131,34 +133,37 @@ function Participants({ slots }: { slots: SlotEntry[] }) {
       <h2 className="mb-3 text-sm font-semibold">Participants</h2>
       <ol className="space-y-3 text-sm">
         {slots.map((s) => (
-          <li key={s.participantId}>
-            <p className="font-medium">
-              {s.position}.{" "}
-              {s.agentId ? (
-                <Link href={`/agents/${s.agentId}`} className="hover:underline">
-                  {s.name}
-                </Link>
-              ) : (
-                <>
-                  {s.name} <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">(agent deleted)</span>
-                </>
-              )}
-            </p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              by {s.ownerName}
-              {s.provider && s.modelId && <> · {modelLabel(s.provider, s.modelId)}</>}
-            </p>
-            {s.modelFallbackFrom && s.provider && (
-              <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
-                Ran on {modelLabel(s.provider, s.modelId ?? "")}: its chosen model ({modelLabel(s.provider, s.modelFallbackFrom)}) has been retired.
+          <li key={s.participantId} className="flex gap-3">
+            <Avatar src={s.avatarUrl} size={36} className="mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-medium">
+                {s.position}.{" "}
+                {s.agentId ? (
+                  <Link href={`/agents/${s.agentId}`} className="hover:underline">
+                    {s.name}
+                  </Link>
+                ) : (
+                  <>
+                    {s.name} <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">(agent deleted)</span>
+                  </>
+                )}
               </p>
-            )}
-            {priceOf(s.provider, s.modelId) && (
-              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Paid model, billed to its owner&apos;s OpenRouter account.</p>
-            )}
-            {s.silencedReason && (
-              <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">Can&apos;t speak any more: {s.silencedReason}.</p>
-            )}
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                by {s.ownerName}
+                {s.provider && s.modelId && <> · {modelLabel(s.provider, s.modelId)}</>}
+              </p>
+              {s.modelFallbackFrom && s.provider && (
+                <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                  Ran on {modelLabel(s.provider, s.modelId ?? "")}: its chosen model ({modelLabel(s.provider, s.modelFallbackFrom)}) has been retired.
+                </p>
+              )}
+              {priceOf(s.provider, s.modelId) && (
+                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Paid model, billed to its owner&apos;s OpenRouter account.</p>
+              )}
+              {s.silencedReason && (
+                <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">Can&apos;t speak any more: {s.silencedReason}.</p>
+              )}
+            </div>
           </li>
         ))}
       </ol>
@@ -202,11 +207,16 @@ async function Lobby({
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Slot {position}{position === 1 ? " · speaks first" : ""}</p>
               {slot ? (
                 <>
-                  <p className="font-medium">{slot.name}</p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    by {slot.ownerName}
-                    {slot.provider && slot.modelId && <> · {modelLabel(slot.provider, slot.modelId)}</>}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <Avatar src={slot.avatarUrl} size={40} />
+                    <div className="min-w-0">
+                      <p className="font-medium">{slot.name}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        by {slot.ownerName}
+                        {slot.provider && slot.modelId && <> · {modelLabel(slot.provider, slot.modelId)}</>}
+                      </p>
+                    </div>
+                  </div>
                   {slot.userId === me?.id && (
                     <form action={withdrawAction} className="mt-auto pt-2">
                       <input type="hidden" name="participantId" value={slot.participantId} />

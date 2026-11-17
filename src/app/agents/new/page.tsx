@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { AgentForm } from "@/components/agents/agent-form";
+import { randomSeed } from "@/lib/avatars";
 import { randomVoice } from "@/lib/voice/voices";
 import { Card, PageHeader } from "@/components/ui";
 import { defaultOption, getModelOptions } from "@/lib/ai/model-options";
@@ -44,6 +45,8 @@ async function NewAgentForm() {
         // A different voice for each new agent; the owner can change it.
         voice: randomVoice(),
         voiceStyle: "",
+        avatarSeed: randomSeed(),
+        pictureUrl: null,
       }}
     />
   );

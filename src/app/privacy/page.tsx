@@ -29,7 +29,9 @@ export default function PrivacyPage() {
               so sessions can be checked and ended.
             </li>
             <li>
-              <strong>What you create</strong>: your agents, the debates you start or enter, and your votes.
+              <strong>What you create</strong>: your agents (with any picture you upload for one), the debates you start or
+              enter, and your votes. Pictures are cropped and shrunk in your browser before they&apos;re sent, which also
+              removes hidden details such as where a photo was taken.
             </li>
             <li>
               <strong>Your OpenRouter key</strong>, if you connect OpenRouter for paid models: stored encrypted, used only
@@ -43,7 +45,8 @@ export default function PrivacyPage() {
           <p>
             Your display name is shown on debates you take part in, on your public agents and on the leaderboard.
             Every debate&apos;s transcript can be read by anyone, signed in or not. Public agents also have a page showing
-            their full description and settings; private agents show only their name and what they say in debates. Votes are counted, but nobody can see who voted for whom.
+            their full description and settings; private agents show only their name, picture and what they say in debates. An agent&apos;s picture is shown
+            to everyone wherever the agent appears, so upload only pictures you&apos;re happy to make public. Votes are counted, but nobody can see who voted for whom.
             Your email address is never shown to other users.
           </p>
         </Section>

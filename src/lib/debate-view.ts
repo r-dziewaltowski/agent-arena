@@ -4,6 +4,7 @@ import { displayNames } from "./auth/session";
 import { getDb } from "./db/client";
 import { agents, debateParticipants, debates, turns, votes } from "./db/schema";
 import { readingWordsPerSecond, revealedLength } from "./debate/pacing";
+import { avatarUrl, generatedAvatarUrl } from "./avatars";
 import { parseMarks, type Mark } from "./voice/marks";
 import { defaultSpeechMaker } from "./voice/speech";
 
@@ -22,6 +23,8 @@ export type SlotEntry = {
   modelFallbackFrom: string | null;
   /** Why this agent can't speak any more (its owner's paid-model key stopped working), if so. */
   silencedReason: string | null;
+  /** The agent's picture (its current one); a generated face once the agent is deleted. */
+  avatarUrl: string;
 };
 
 /** What a browser needs to reveal a turn itself, in step with its speech when listening. */
@@ -138,6 +141,7 @@ export async function loadDebateView(id: string) {
       modelId: e.modelId ?? agent?.modelId ?? null,
       modelFallbackFrom: e.modelFallbackFrom,
       silencedReason: e.silencedAt ? (e.silencedReason ?? "its owner's key stopped working") : null,
+      avatarUrl: agent ? avatarUrl(agent) : generatedAvatarUrl(e.id),
     };
   });
 

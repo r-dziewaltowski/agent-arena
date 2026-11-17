@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { removeAgent } from "@/actions/agents";
+import { Avatar } from "@/components/avatar";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Badge, ButtonLink, Card } from "@/components/ui";
 import { isRetired, modelLabel } from "@/lib/ai/model-options";
+import { avatarUrl } from "@/lib/avatars";
 import type { agents } from "@/lib/db/schema";
 import { CREATIVITY_LABELS, TURN_LENGTH_LABELS, traitLabel, type Creativity, type TurnLength } from "@/lib/debate/traits";
 
@@ -23,14 +25,17 @@ export function AgentCard({
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <Link href={`/agents/${agent.id}`} className="text-lg font-semibold hover:underline">
-            {agent.name}
-          </Link>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {modelLabel(agent.provider, agent.modelId)} · {CREATIVITY_LABELS[agent.creativity as Creativity].label} ·{" "}
-            {TURN_LENGTH_LABELS[agent.turnLength as TurnLength].label} turns
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar src={avatarUrl(agent)} size={48} />
+          <div className="min-w-0">
+            <Link href={`/agents/${agent.id}`} className="text-lg font-semibold hover:underline">
+              {agent.name}
+            </Link>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {modelLabel(agent.provider, agent.modelId)} · {CREATIVITY_LABELS[agent.creativity as Creativity].label} ·{" "}
+              {TURN_LENGTH_LABELS[agent.turnLength as TurnLength].label} turns
+            </p>
+          </div>
         </div>
         <Badge tone={agent.visibility === "public" ? "green" : "neutral"}>{traitLabel(agent.visibility)}</Badge>
       </div>

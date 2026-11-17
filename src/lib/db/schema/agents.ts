@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { user } from "./auth";
 
 export const agents = sqliteTable(
@@ -32,6 +32,10 @@ export const agents = sqliteTable(
     voice: text("voice"),
     /** How it speaks, in the owner's words; empty follows the agent's tone. */
     voiceStyle: text("voice_style"),
+    /** When its uploaded picture last changed (part of the picture's address); null: none uploaded. */
+    imageUpdatedAt: integer("image_updated_at"),
+    /** Seed of its generated face (`avatars.ts`), shown without a picture; null: the agent's id. */
+    avatarSeed: text("avatar_seed"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -42,3 +46,16 @@ export const agents = sqliteTable(
     uniqueIndex("agents_owner_name_unique").on(t.ownerId, sql`lower(${t.name})`),
   ],
 );
+
+/**
+ * An agent's uploaded picture: a square of at most 256 px, re-encoded in the owner's browser (which
+ * drops hidden data such as location). Kept apart from `agents`, so lists never load it.
+ */
+export const agentImages = sqliteTable("agent_images", {
+  agentId: text("agent_id")
+    .primaryKey()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  mimeType: text("mime_type").notNull(),
+  data: blob("data", { mode: "buffer" }).notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

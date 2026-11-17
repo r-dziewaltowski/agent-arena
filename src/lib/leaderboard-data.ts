@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { connection } from "next/server";
+import { avatarUrl } from "./avatars";
 import { displayNames } from "./auth/session";
 import { getDb } from "./db/client";
 import { agents, debateParticipants, debates, user, votes } from "./db/schema";
@@ -54,7 +55,14 @@ export async function loadLeaderboards() {
 
   const agentInfo = agentRows.length
     ? await db
-        .select({ id: agents.id, name: agents.name, visibility: agents.visibility, ownerId: agents.ownerId })
+        .select({
+          id: agents.id,
+          name: agents.name,
+          visibility: agents.visibility,
+          ownerId: agents.ownerId,
+          imageUpdatedAt: agents.imageUpdatedAt,
+          avatarSeed: agents.avatarSeed,
+        })
         .from(agents)
         .where(inArray(agents.id, agentRows.map((r) => r.key)))
     : [];
@@ -65,7 +73,15 @@ export async function loadLeaderboards() {
     agents: agentRows.flatMap((r) => {
       const info = infoById.get(r.key);
       if (!info) return []; // deleted between the two queries
-      return [{ ...r, name: info.name, isPublic: info.visibility === "public", ownerName: names.get(info.ownerId) ?? "Unknown" }];
+      return [
+        {
+          ...r,
+          name: info.name,
+          isPublic: info.visibility === "public",
+          ownerName: names.get(info.ownerId) ?? "Unknown",
+          avatarUrl: avatarUrl(info),
+        },
+      ];
     }),
     users: userRows.map((r) => ({ ...r, name: names.get(r.key) ?? "Unknown" })),
   };

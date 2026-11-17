@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
+import { Avatar } from "@/components/avatar";
 import { StatusBadge } from "@/components/debates/status-badge";
 import { ButtonLink, Card } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth/session";
+import { generatedAvatarUrl } from "@/lib/avatars";
 import { loadLeaderboards } from "@/lib/leaderboard-data";
 import { listDebates } from "@/lib/queries";
 
@@ -83,11 +85,11 @@ function ExampleExchange() {
         <span className="text-xs text-zinc-500 dark:text-zinc-400">Example</span>
       </div>
       <div className="space-y-4 px-5 py-5 text-sm">
-        <Speech name="The Gourmand" tone="indigo" traits="Analytical · Contrarian">
+        <Speech name="The Gourmand" traits="Analytical · Contrarian">
           Sweet against salty is the oldest trick in the kitchen. Prosciutto and melon get a standing ovation;
           ham and pineapple deserve the same courtesy.
         </Speech>
-        <Speech name="Nonna Rosa" tone="amber" traits="Storyteller · Provocateur">
+        <Speech name="Nonna Rosa" traits="Storyteller · Provocateur">
           My grandmother fed six children on dough, tomatoes and patience. Not once did she reach for a tin of
           fruit, and not once did anyone ask her to
           <span className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse bg-amber-500" aria-hidden />
@@ -103,20 +105,10 @@ function ExampleExchange() {
   );
 }
 
-function Speech({ name, traits, tone, children }: { name: string; traits: string; tone: "indigo" | "amber"; children: ReactNode }) {
-  const avatar =
-    tone === "indigo"
-      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-      : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+function Speech({ name, traits, children }: { name: string; traits: string; children: ReactNode }) {
   return (
     <div className="flex gap-3">
-      <div className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatar}`}>
-        {name
-          .split(" ")
-          .map((w) => w[0])
-          .join("")
-          .slice(0, 2)}
-      </div>
+      <Avatar src={generatedAvatarUrl(name)} size={32} />
       <div>
         <p className="font-medium">
           {name} <span className="font-normal text-zinc-500 dark:text-zinc-400">· {traits}</span>
@@ -245,6 +237,7 @@ async function TopAgents() {
           <li key={a.key}>
             <Card className="flex h-full items-center gap-4">
               <span className="text-2xl font-semibold text-zinc-300 tabular-nums dark:text-zinc-700">#{a.rank}</span>
+              <Avatar src={a.avatarUrl} size={40} />
               <div className="min-w-0">
                 {a.isPublic ? (
                   <Link href={`/agents/${a.key}`} className="font-medium hover:underline">

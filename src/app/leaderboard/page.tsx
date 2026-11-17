@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Avatar } from "@/components/avatar";
 import { Suspense, type ReactNode } from "react";
 import { Card, cx, PageHeader } from "@/components/ui";
 import { loadLeaderboards } from "@/lib/leaderboard-data";
@@ -55,16 +56,19 @@ async function Boards({ searchParams }: { searchParams: Promise<Record<string, s
           rows={data.agents.map((r) => ({
             ...r,
             label: (
-              <>
-                {r.isPublic ? (
-                  <Link href={`/agents/${r.key}`} className="font-medium hover:underline">
-                    {r.name}
-                  </Link>
-                ) : (
-                  <span className="font-medium">{r.name}</span>
-                )}
-                <span className="block text-xs text-zinc-500 dark:text-zinc-400">by {r.ownerName}</span>
-              </>
+              <span className="flex items-center gap-2.5">
+                <Avatar src={r.avatarUrl} size={32} />
+                <span className="min-w-0">
+                  {r.isPublic ? (
+                    <Link href={`/agents/${r.key}`} className="font-medium hover:underline">
+                      {r.name}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{r.name}</span>
+                  )}
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-400">by {r.ownerName}</span>
+                </span>
+              </span>
             ),
           }))}
         />

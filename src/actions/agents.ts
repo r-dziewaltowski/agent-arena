@@ -7,7 +7,8 @@ import { redirect } from "next/navigation";
 import { getModelOptions } from "@/lib/ai/model-options";
 import { requireUser, safeNext } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
-import { agents } from "@/lib/db/schema";
+import { agentImages, agents } from "@/lib/db/schema";
+import { MAX_SEED_LENGTH, MAX_UPLOAD_BYTES, sniffImageType } from "@/lib/avatars";
 import { isAgentNameTaken, nameTakenMessage } from "@/lib/agent-names";
 import { deleteAgent, isUniqueViolation, LifecycleError } from "@/lib/debate/lifecycle";
 import { agentSchema } from "@/lib/validation/agent";
@@ -37,7 +38,22 @@ const AGENT_FIELDS = [
   "visibility",
   "voice",
   "voiceStyle",
+  "avatarSeed",
 ] as const;
+
+/**
+ * The picture the form sent, already shrunk to a small square by the browser: checked by its real
+ * format and size. `undefined`: none sent (keep the current one).
+ */
+async function submittedPicture(formData: FormData): Promise<{ data: Buffer; mimeType: string } | string | undefined> {
+  const upload = formData.get("image");
+  if (!(upload instanceof File) || upload.size === 0) return undefined;
+  if (upload.size > MAX_UPLOAD_BYTES) return "That picture is too large. Try another one.";
+  const bytes = new Uint8Array(await upload.arrayBuffer());
+  const mimeType = sniffImageType(bytes);
+  if (!mimeType) return "Upload a picture: a JPEG, PNG or WebP file.";
+  return { data: Buffer.from(bytes), mimeType };
+}
 
 /** Creates or updates an agent from the agent form. */
 export async function saveAgent(_prev: AgentFormState, formData: FormData): Promise<AgentFormState> {
@@ -65,6 +81,10 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
     return { errors: z.flattenError(parsed.error).fieldErrors, message: "Please fix the highlighted fields.", values };
   }
   const v = parsed.data;
+  const picture = await submittedPicture(formData);
+  if (typeof picture === "string") return { errors: { image: [picture] }, values };
+  const removePicture = formData.get("removeImage") === "1";
+  const avatarSeed = String(formData.get("avatarSeed") ?? "").trim().slice(0, MAX_SEED_LENGTH) || null;
 
   // Only models the form can currently offer may be saved, except an unchanged existing choice.
   const options = await getModelOptions({ paid: await canUsePaidModels(db, me.id) });
@@ -81,14 +101,25 @@ export async function saveAgent(_prev: AgentFormState, formData: FormData): Prom
   if (await isAgentNameTaken(db, me.id, v.name, existing?.id)) return nameTaken;
 
   const now = Date.now();
+  // A new picture replaces the old one; "remove" goes back to the generated face.
+  const imageUpdatedAt = picture ? now : removePicture ? null : (existing?.imageUpdatedAt ?? null);
+  const id = existing?.id ?? randomUUID();
   try {
     if (existing) {
       await db
         .update(agents)
-        .set({ ...v, updatedAt: now })
+        .set({ ...v, avatarSeed, imageUpdatedAt, updatedAt: now })
         .where(eq(agents.id, existing.id));
     } else {
-      await db.insert(agents).values({ id: randomUUID(), ownerId: me.id, ...v, createdAt: now, updatedAt: now });
+      await db.insert(agents).values({ id, ownerId: me.id, ...v, avatarSeed, imageUpdatedAt, createdAt: now, updatedAt: now });
+    }
+    if (picture) {
+      await db
+        .insert(agentImages)
+        .values({ agentId: id, ...picture, updatedAt: now })
+        .onConflictDoUpdate({ target: agentImages.agentId, set: { ...picture, updatedAt: now } });
+    } else if (removePicture) {
+      await db.delete(agentImages).where(eq(agentImages.agentId, id));
     }
   } catch (err) {
     // Two saves with the same name at once: the database's unique index stops the second.

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Avatar } from "@/components/avatar";
 import { Notice, cx } from "@/components/ui";
 import { costUsd, formatUsd, type Price } from "@/lib/ai/pricing";
 import { revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
@@ -10,7 +11,7 @@ import { charsAt } from "@/lib/voice/marks";
 import { Countdown } from "./countdown";
 
 /** `price`: set for agents on paid models, billed to their owner's OpenRouter account. */
-type Speaker = { participantId: string; name: string; position: number; price: Price | null };
+type Speaker = { participantId: string; name: string; position: number; price: Price | null; avatarUrl: string };
 type Silenced = { participantId: string; reason: string | null };
 
 type LiveState = {
@@ -192,7 +193,10 @@ export function LiveDebate({
               const idx = ((speaker?.position ?? 1) - 1) % SPEAKER_COLORS.length;
               return (
                 <article key={t.seq} className={cx("rounded-md border-l-4 px-4 py-3", SPEAKER_COLORS[idx])}>
-                  <p className={cx("mb-1 text-sm font-semibold", NAME_COLORS[idx])}>{speaker?.name ?? "Unknown"}</p>
+                  <div className="mb-2 flex items-center gap-2.5">
+                    {speaker && <Avatar src={speaker.avatarUrl} size={32} />}
+                    <p className={cx("text-sm font-semibold", NAME_COLORS[idx])}>{speaker?.name ?? "Unknown"}</p>
+                  </div>
                   {t.reveal ? (
                     <RevealText text={t.reveal.full} shown={shownLength({ ...t, reveal: t.reveal })} />
                   ) : (

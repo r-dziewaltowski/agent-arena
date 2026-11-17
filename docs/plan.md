@@ -171,7 +171,7 @@ Model cost: the project never pays for model calls.
 
 ## Routes and pages
 
-Pages under `src/app/`: `/` (open and recent debates), `/sign-in`, `/sign-up`, `/agents` (yours), `/agents/new`, `/agents/[id]` (public agents, or your own), `/agents/[id]/edit`, `/debates` (filter: open / running / completed / mine), `/debates/new`, `/debates/[id]`:
+Pages under `src/app/`: `/` (home: the pitch with a made-up example exchange labelled "Example", up to four debates with live first, then open, then finished, "How it works", the top three agents once any result is final, and a free-to-play note; the buttons depend on sign-in), `/sign-in`, `/sign-up`, `/agents` (yours), `/agents/new`, `/agents/[id]` (public agents, or your own), `/agents/[id]/edit`, `/debates` (filter: open / running / completed / mine), `/debates/new`, `/debates/[id]`:
 - open: settings, slots with entrants, Enter (pick one of your agents and a free slot), Withdraw, Start (creator, manual), Delete (creator), countdown for scheduled starts;
 - running/completed: transcript with the current turn growing word by word (polling), a "waiting for the model" notice when the model is unreachable, cost badges; when completed, the vote panel with the closing countdown and the tally shown per `tallyVisibility` (provisional), then the final result once voting closes;
 - cancelled: the reason.
@@ -246,6 +246,8 @@ _Leaderboard: ✅ done first (2026-11-16)._ `/leaderboard` (public, header link)
 - Tests: unit (account deletion, email templates); end-to-end (sign-up → confirm via the outbox → signed in, now used by every test that signs up; unconfirmed sign-in resends the link; re-registering a taken email; forgot → reset → old password refused; change name; wrong and right current password, with another browser signed out; delete account; `/account` needs sign-in; privacy link). Not automated: deleted users leaving the users leaderboard (needs a debate whose voting has closed).
 
 **M7. Google sign-in.** ✅ Done 2026-11-16: checked locally and on production (the Google login joined the existing account with the same verified email; no errors in the logs). Decided 2026-11-16 (owner). "Continue with Google" next to GitHub on the sign-in and sign-up pages, each provider switched on only when its OAuth client credentials are set (`src/lib/auth/social.ts`); one Google OAuth client (Web application) with the localhost and production redirect URIs, consent screen published with basic scopes only (email, profile), which needs no Google verification. Google reports verified emails, so a Google login can link to an existing account whose email is confirmed (the same rule as GitHub). Failed sign-ins come back naming the service used (`via=google`). The Account page names the service an account signs in with; the privacy page lists Google and GitHub as optional sign-in services. Tests: unit tests for the provider list and messages; the real flow checked by hand, locally and on production.
+
+**Home page.** Done 2026-11-17, checked locally (desktop and phone widths). `/` used to redirect to `/debates`; it is now a home page (see Routes and pages). Test: `e2e/home.spec.ts`.
 
 **Later, optional.**
 - From M5: an LLM judge's verdict next to the human tally; an "Advanced" raw temperature override per agent; direct provider keys (Anthropic, OpenAI).

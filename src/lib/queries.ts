@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "./db/client";
-import { agents, debateParticipants, debates } from "./db/schema";
+import { agents, debateParticipants, debates, votes } from "./db/schema";
+import { listOutcome } from "./debate/results";
 
 /** Read helpers shared by pages. Writes go through lifecycle.ts and the server actions. */
 
@@ -60,10 +61,25 @@ export async function listDebates(filter: DebateFilter, userId: string) {
       : []
     ).map((a) => [a.id, a.name]),
   );
+  // Votes, only for finished debates whose voting has closed: the list shows results only then.
+  const now = Date.now();
+  const closedIds = rows.filter((d) => d.status === "completed" && d.votingClosesAt !== null && d.votingClosesAt <= now).map((d) => d.id);
+  const voteRows = closedIds.length
+    ? await db
+        .select({ debateId: votes.debateId, participantId: votes.participantId, userId: votes.userId })
+        .from(votes)
+        .where(inArray(votes.debateId, closedIds))
+    : [];
   const withEntries = rows.map((d) => {
     const list = (byDebate.get(d.id) ?? []).sort((a, b) => a.position - b.position);
     const names = list.map((e) => e.name ?? (e.agentId ? agentNames.get(e.agentId) : undefined) ?? "Unknown");
-    return { ...d, entries: list, names };
+    const outcome = listOutcome(
+      d,
+      list.map((e, i) => ({ id: e.id, name: names[i] })),
+      voteRows.filter((v) => v.debateId === d.id),
+      now,
+    );
+    return { ...d, entries: list, names, outcome };
   });
   if (filter !== "mine") return withEntries;
   return withEntries.filter((d) => d.creatorId === userId || d.entries.some((e) => e.userId === userId));

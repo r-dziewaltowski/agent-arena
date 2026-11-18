@@ -18,6 +18,39 @@ export type Results = {
   final: boolean;
 };
 
+/**
+ * What the debate list says about a finished debate. Counts appear only once voting has closed:
+ * before that, each debate's tally visibility decides who may see them, and the list doesn't
+ * know who has voted, so it just invites people to vote.
+ */
+export type ListOutcome =
+  | { kind: "voting"; closesAt: number }
+  | { kind: "result"; winner: string | null; tied: string[]; winnerVotes: number; total: number };
+
+export function listOutcome(
+  debate: { status: string; votingClosesAt: number | null },
+  participants: { id: string; name: string }[],
+  votes: VoteRow[],
+  now = Date.now(),
+): ListOutcome | null {
+  if (debate.status !== "completed" || debate.votingClosesAt === null) return null;
+  if (now < debate.votingClosesAt) return { kind: "voting", closesAt: debate.votingClosesAt };
+  const results = computeResults(
+    participants.map((p) => p.id),
+    votes,
+    debate.votingClosesAt,
+    now,
+  );
+  const nameOf = new Map(participants.map((p) => [p.id, p.name]));
+  return {
+    kind: "result",
+    winner: results.winner ? (nameOf.get(results.winner) ?? "Unknown") : null,
+    tied: results.tie ? results.leaders.map((id) => nameOf.get(id) ?? "Unknown") : [],
+    winnerVotes: results.leaders.length ? results.counts[results.leaders[0]] : 0,
+    total: results.total,
+  };
+}
+
 export function computeResults(
   participantIds: string[],
   votes: VoteRow[],

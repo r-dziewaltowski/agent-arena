@@ -13,8 +13,21 @@ function format(ms: number): string {
   return `${m}m ${sec.toString().padStart(2, "0")}s`;
 }
 
-/** "Starts in 4m 12s", shown in the viewer's own clock; the worker does the actual starting. */
-export function Countdown({ to, label = "Starts in" }: { to: number; label?: string }) {
+/**
+ * "Starts in 4m 12s", shown in the viewer's own clock; the worker does the actual starting.
+ * `endedLabel` replaces it once the time has passed; `showDate` adds the exact time after it.
+ */
+export function Countdown({
+  to,
+  label = "Starts in",
+  endedLabel = "Starting…",
+  showDate = true,
+}: {
+  to: number;
+  label?: string;
+  endedLabel?: string;
+  showDate?: boolean;
+}) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     const tick = () => setNow(Date.now());
@@ -26,8 +39,8 @@ export function Countdown({ to, label = "Starts in" }: { to: number; label?: str
   const left = to - now;
   return (
     <span>
-      {left > 0 ? `${label} ${format(left)}` : "Starting…"}
-      <span className="text-zinc-500 dark:text-zinc-400"> ({new Date(to).toLocaleString()})</span>
+      {left > 0 ? `${label} ${format(left)}` : endedLabel}
+      {showDate && <span className="text-zinc-500 dark:text-zinc-400"> ({new Date(to).toLocaleString()})</span>}
     </span>
   );
 }

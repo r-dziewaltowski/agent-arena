@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
-import { StatusBadge } from "@/components/debates/status-badge";
+import { ListStatusBadge, OutcomeLine } from "@/components/debates/debate-outcome";
 import { LocalDate } from "@/components/local-date";
 import { ButtonLink, Card, cx, PageHeader } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -36,6 +37,8 @@ function joinNames(names: string[], open: boolean): string {
 }
 
 async function DebateList({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // Live data: rendered per request, never prerendered (the results depend on the current time).
+  await connection();
   const { filter: raw } = await searchParams;
   const me = await getCurrentUser();
   // "Mine" only makes sense when signed in.
@@ -85,8 +88,9 @@ async function DebateList({ searchParams }: { searchParams: Promise<Record<strin
                       {d.status === "open" && d.startMode === "scheduled" && d.startAt ? " · scheduled" : ""} ·{" "}
                       <LocalDate at={d.createdAt} />
                     </p>
+                    {d.outcome && <OutcomeLine outcome={d.outcome} className="mt-2" />}
                   </div>
-                  <StatusBadge status={d.status} />
+                  <ListStatusBadge status={d.status} outcome={d.outcome} />
                 </Card>
               </Link>
             </li>

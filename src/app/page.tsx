@@ -2,7 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
 import { Avatar } from "@/components/avatar";
-import { StatusBadge } from "@/components/debates/status-badge";
+import { ListStatusBadge, OutcomeLine } from "@/components/debates/debate-outcome";
 import { ButtonLink, Card } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth/session";
 import { generatedAvatarUrl } from "@/lib/avatars";
@@ -165,8 +165,9 @@ async function HappeningNow() {
                 <Card className="flex h-full flex-col gap-3 transition-colors hover:border-indigo-300 dark:hover:border-indigo-800">
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-medium">{d.topic}</p>
-                    <StatusBadge status={d.status} />
+                    <ListStatusBadge status={d.status} outcome={d.outcome} />
                   </div>
+                  {d.outcome && <OutcomeLine outcome={d.outcome} />}
                   <p className="mt-auto text-sm text-zinc-600 dark:text-zinc-400">
                     {joinNames(d.names, d.status === "open")}
                     <span className="text-zinc-400 dark:text-zinc-500">

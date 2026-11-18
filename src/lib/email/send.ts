@@ -9,7 +9,8 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import nodemailer from "nodemailer";
 
-export type Email = { to: string; subject: string; text: string; html: string };
+/** `replyTo`: where a reply goes instead of the app's address (a Contact page sender). */
+export type Email = { to: string; subject: string; text: string; html: string; replyTo?: string };
 
 export interface EmailSender {
   send(email: Email): Promise<void>;

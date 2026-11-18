@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { expect } from "@playwright/test";
 import { EMAIL_OUTBOX_FILE } from "./env";
 
-type SentEmail = { to: string; subject: string; text: string; sentAt: number };
+type SentEmail = { to: string; subject: string; text: string; replyTo?: string; sentAt: number };
 
 function emailsTo(to: string): SentEmail[] {
   if (!existsSync(EMAIL_OUTBOX_FILE)) return [];
@@ -16,6 +16,17 @@ function emailsTo(to: string): SentEmail[] {
 /** How many emails this address has been sent so far. */
 export function emailCount(to: string): number {
   return emailsTo(to).length;
+}
+
+/** The newest email to `to` whose subject contains `subject`, waiting for it to arrive. */
+export async function latestEmail(to: string, subject: string, after = 0): Promise<SentEmail> {
+  let found: SentEmail | undefined;
+  await expect
+    .poll(() => (found = emailsTo(to).slice(after).filter((e) => e.subject.includes(subject)).at(-1)), {
+      message: `an email to ${to} about "${subject}"`,
+    })
+    .toBeDefined();
+  return found!;
 }
 
 /**

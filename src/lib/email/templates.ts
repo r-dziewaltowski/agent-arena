@@ -68,3 +68,21 @@ export function reportReceived(
     html: layout(lines, { url: reportsUrl, label: "Review reports" }),
   };
 }
+
+/** Tells an admin about a Contact page message. Replying to the email answers the sender. */
+export function contactReceived(
+  to: string,
+  message: { topic: string; body: string; replyTo: string; senderName: string | null },
+  adminUrl: string,
+): Email {
+  const from = message.senderName ? `${message.senderName} (signed in, ${message.replyTo})` : message.replyTo;
+  const before = [`New message from ${from}.`, `Topic: ${message.topic}.`];
+  const after = ["Reply to this email to answer them."];
+  return {
+    to,
+    replyTo: message.replyTo,
+    subject: `Message on ${APP_NAME}: ${message.topic}`,
+    text: `${[...before, message.body, ...after].join("\n\n")}\n\nAll messages: ${adminUrl}`,
+    html: layout([...before, ...message.body.split(/\n\s*\n/), ...after], { url: adminUrl, label: "Open the admin page" }),
+  };
+}

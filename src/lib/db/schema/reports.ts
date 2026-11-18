@@ -4,7 +4,7 @@ import { debateParticipants, debates, turns } from "./debates";
 
 /**
  * Someone signed in flagging part of a debate for an admin: its topic, one turn, or one agent (its
- * name or picture). Only admins see reports; they act on them from /admin/reports.
+ * name or picture). Only admins see reports; they act on them from /admin.
  */
 export const reports = sqliteTable(
   "reports",

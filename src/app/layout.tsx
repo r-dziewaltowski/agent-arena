@@ -52,6 +52,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/privacy" className="hover:text-zinc-900 hover:underline dark:hover:text-zinc-100">
               Privacy
             </Link>
+            <Link href="/contact" className="hover:text-zinc-900 hover:underline dark:hover:text-zinc-100">
+              Contact
+            </Link>
             <a href="https://github.com/r-dziewaltowski/agent-arena" className="hover:text-zinc-900 hover:underline dark:hover:text-zinc-100">
               Source on GitHub
             </a>

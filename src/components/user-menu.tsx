@@ -2,15 +2,17 @@ import Link from "next/link";
 import { signOutAction } from "@/actions/auth";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
+import { openMessageCount } from "@/lib/contact";
 import { openReportCount } from "@/lib/reports";
 import { AuthLink, ReturnPathInput } from "./auth-links";
 import { Badge, Button, buttonLinkClass } from "./ui";
 
-/** Admins: a link to the Reports page, with how many are waiting. */
+/** Admins: a link to the admin page, with how many reports and messages are waiting. */
 async function AdminLink() {
-  const open = await openReportCount(await getDb());
+  const db = await getDb();
+  const open = (await openReportCount(db)) + (await openMessageCount(db));
   return (
-    <Link href="/admin/reports" title="Reports to review" className="hover:opacity-80">
+    <Link href="/admin" title="Reports and messages" className="hover:opacity-80">
       <Badge tone={open > 0 ? "red" : "amber"}>{open > 0 ? `admin · ${open} to review` : "admin"}</Badge>
     </Link>
   );

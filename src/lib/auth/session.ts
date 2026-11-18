@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getDb } from "../db/client";
 import { user } from "../db/schema";
 import { auth } from "./auth";
@@ -20,6 +20,19 @@ export async function requireUser(returnTo?: string): Promise<CurrentUser> {
   const me = await getCurrentUser();
   if (!me) redirect(returnTo ? `/sign-in?next=${encodeURIComponent(returnTo)}` : "/sign-in");
   return me;
+}
+
+/** Admins only: others get a 404, as if the admin pages weren't there. */
+export async function requireAdmin(): Promise<CurrentUser> {
+  const me = await requireUser("/admin");
+  if (!me.isAdmin) notFound();
+  return me;
+}
+
+/** The signed-in user's name and email address (only to prefill their own forms), or null for visitors. */
+export async function getCurrentContact(): Promise<{ displayName: string; email: string } | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  return session ? { displayName: session.user.displayName, email: session.user.email } : null;
 }
 
 /** Display names for a set of user ids (never email addresses). */

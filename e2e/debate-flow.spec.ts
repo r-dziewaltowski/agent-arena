@@ -237,7 +237,7 @@ test("visitors can watch but not vote, and the leaderboard waits for voting to c
   await expect(page.getByText("No agent has a final result yet.", { exact: false })).toBeVisible();
 });
 
-test("a viewer reports a turn once; an admin removes its text from the Reports page", async ({ browser }) => {
+test("a viewer reports a turn once; an admin removes its text from the admin page", async ({ browser }) => {
   await makeAdmin(bob.email);
   const emailsBefore = emailCount(bob.email);
   const a = await newUserPage(browser, alice, "sign-in");
@@ -262,8 +262,8 @@ test("a viewer reports a turn once; an admin removes its text from the Reports p
 
   // The admin reviews it and removes the turn's text.
   const b = await newUserPage(browser, bob, "sign-in");
-  await b.getByRole("link", { name: "admin · 1 to review" }).click();
-  await expect(b.getByRole("heading", { name: "Reports" })).toBeVisible();
+  await b.getByRole("link", { name: /^admin · \d+ to review$/ }).click();
+  await expect(b.getByRole("heading", { name: "Reports to review (1)" })).toBeVisible();
   await expect(b.getByText("Turn 2 by Bram E2E")).toBeVisible();
   await expect(b.getByText("“Testing reports.”")).toBeVisible();
   await b.getByRole("button", { name: "Remove this turn's text" }).click();

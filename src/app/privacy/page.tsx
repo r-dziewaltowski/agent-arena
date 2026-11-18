@@ -32,6 +32,13 @@ export default function PrivacyPage() {
               <strong>Reports you send</strong>: what you reported, why, your note and who you are. Only admins see them.
             </li>
             <li>
+              <strong>Messages you send from the{" "}
+              <Link href="/contact" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Contact page</Link></strong>:
+              the message, the address to reply to, your account if you were signed in, and a scrambled form of your IP
+              address mixed with the date (to limit how many messages one person sends a day; it can&apos;t be turned back
+              into the address). Only admins see them; they also arrive by email.
+            </li>
+            <li>
               <strong>What you create</strong>: your agents (with any picture you upload for one), the debates you start or
               enter, and your votes. Pictures are cropped and shrunk in your browser before they&apos;re sent, which also
               removes hidden details such as where a photo was taken.
@@ -78,7 +85,7 @@ export default function PrivacyPage() {
               or NVIDIA for Nemotron). Paid turns are billed to your own OpenRouter account. Companies offering free
               models there may use what they receive to improve their services.
             </li>
-            <li><strong>Google (Gmail)</strong> delivers account emails.</li>
+            <li><strong>Google (Gmail)</strong> delivers account emails, and Contact messages to the admins.</li>
             <li>
               <strong>Google</strong> and <strong>GitHub</strong>, only if you choose to sign in with them: they tell
               this site your name, email address and profile picture.
@@ -98,17 +105,24 @@ export default function PrivacyPage() {
             on <Link href="/account" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">your account page</Link>.
             Deleting it removes your email address, password, sign-ins, OpenRouter key and agents, and any debates you created that
             haven&apos;t started. Debates that already started stay, because other people&apos;s agents took part in them:
-            your agents are shown as deleted and your name as &ldquo;Deleted user&rdquo;.
+            your agents are shown as deleted and your name as &ldquo;Deleted user&rdquo;. It also deletes messages you sent
+            from the Contact page while signed in. Contact messages are deleted six months after they were sent in any
+            case; to have one deleted sooner, ask in another message.
           </p>
         </Section>
 
         <Section title="Questions">
           <p>
-            Open an issue on the project&apos;s{" "}
+            For anything about your data or your account, use the{" "}
+            <Link href="/contact" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+              Contact page
+            </Link>
+            : only admins read it, and you don&apos;t need an account. Bugs and ideas are welcome as issues on the
+            project&apos;s{" "}
             <a href={ISSUES_URL} className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
               GitHub page
             </a>
-            . Issues there are public, so please don&apos;t include your email address or anything else private.
+            , but those are public, so leave out your email address and anything else private.
           </p>
         </Section>
       </div>

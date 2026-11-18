@@ -3,9 +3,8 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth/session";
+import { requireAdmin, requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { debateParticipants, debates, reports, turns, user } from "@/lib/db/schema";
 import { deleteAgent, deleteDebate, LifecycleError } from "@/lib/debate/lifecycle";
@@ -87,17 +86,12 @@ async function notifyAdmins(debateId: string, target: string, targetId: string |
   const origin = h.get("origin") ?? `https://${h.get("host")}`;
   for (const admin of admins) {
     await sendEmail(
-      reportReceived(admin.email, { topic: debate?.topic ?? "", what, reason: REPORT_REASONS[reason], note, reporterName }, `${origin}/admin/reports`),
+      reportReceived(admin.email, { topic: debate?.topic ?? "", what, reason: REPORT_REASONS[reason], note, reporterName }, `${origin}/admin`),
     );
   }
 }
 
-/** Admins only: everything below acts on a report from the Reports page. */
-async function requireAdmin() {
-  const me = await requireUser("/admin/reports");
-  if (!me.isAdmin) notFound();
-  return me;
-}
+/* Admins only: everything below acts on a report from the admin page. */
 
 async function reportOf(formData: FormData) {
   const db = await getDb();

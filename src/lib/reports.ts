@@ -1,6 +1,6 @@
 /**
  * Reports: signed-in people flag part of a debate (its topic, a turn, or an agent's name or
- * picture) for the admins, who act on them from /admin/reports. Nothing is hidden automatically:
+ * picture) for the admins, who act on them from /admin. Nothing is hidden automatically:
  * on a small site, a few accounts could otherwise hide any debate they dislike.
  */
 import { randomUUID } from "node:crypto";

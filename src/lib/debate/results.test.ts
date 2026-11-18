@@ -71,6 +71,7 @@ describe("listOutcome", () => {
       tied: [],
       winnerVotes: 2,
       total: 3,
+      sides: null,
     });
   });
 

@@ -2,8 +2,10 @@
  * Vote counting. Pure functions, so the rules are easy to test: one vote per user (enforced on
  * write), the result is provisional while voting is open and final once it closes.
  */
+import { tallySides, type Side, type SideTally } from "./sides";
 
-export type VoteRow = { participantId: string; userId: string };
+/** `side`: in a for-or-against debate, the side that convinced the voter (null for owners). */
+export type VoteRow = { participantId: string; userId: string; side?: Side | null };
 
 export type Results = {
   /** Votes per participant id (participants with no votes have 0). */
@@ -25,10 +27,18 @@ export type Results = {
  */
 export type ListOutcome =
   | { kind: "voting"; closesAt: number }
-  | { kind: "result"; winner: string | null; tied: string[]; winnerVotes: number; total: number };
+  | {
+      kind: "result";
+      winner: string | null;
+      tied: string[];
+      winnerVotes: number;
+      total: number;
+      /** For-or-against debates: the side vote. */
+      sides: SideTally | null;
+    };
 
 export function listOutcome(
-  debate: { status: string; votingClosesAt: number | null },
+  debate: { status: string; votingClosesAt: number | null; mode?: string },
   participants: { id: string; name: string }[],
   votes: VoteRow[],
   now = Date.now(),
@@ -48,6 +58,7 @@ export function listOutcome(
     tied: results.tie ? results.leaders.map((id) => nameOf.get(id) ?? "Unknown") : [],
     winnerVotes: results.leaders.length ? results.counts[results.leaders[0]] : 0,
     total: results.total,
+    sides: debate.mode === "sides" ? tallySides(votes.map((v) => ({ side: v.side ?? null }))) : null,
   };
 }
 

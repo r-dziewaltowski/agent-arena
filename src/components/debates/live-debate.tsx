@@ -7,11 +7,13 @@ import { Notice, cx } from "@/components/ui";
 import { costUsd, formatUsd, type Price } from "@/lib/ai/pricing";
 import { revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
 import type { TurnView, UpcomingTurn } from "@/lib/debate-view";
+import type { Side } from "@/lib/debate/sides";
 import { charsAt } from "@/lib/voice/marks";
 import { Countdown } from "./countdown";
+import { SideBadge } from "./side-badge";
 
 /** `price`: set for agents on paid models, billed to their owner's OpenRouter account. */
-type Speaker = { participantId: string; name: string; position: number; price: Price | null; avatarUrl: string };
+type Speaker = { participantId: string; name: string; position: number; price: Price | null; avatarUrl: string; side: Side | null };
 type Silenced = { participantId: string; reason: string | null };
 
 type LiveState = {
@@ -31,6 +33,11 @@ const SPEAKER_COLORS = [
   "border-amber-400 bg-amber-50/60 dark:bg-amber-950/40",
   "border-rose-400 bg-rose-50/60 dark:bg-rose-950/40",
 ];
+/** For or against: each turn takes its side's colour (blue or orange) instead of its speaker's. */
+const SIDE_COLORS: Record<Side, { turn: string; name: string }> = {
+  for: { turn: "border-sky-400 bg-sky-50/60 dark:bg-sky-950/40", name: "text-sky-700 dark:text-sky-300" },
+  against: { turn: "border-orange-400 bg-orange-50/60 dark:bg-orange-950/40", name: "text-orange-700 dark:text-orange-300" },
+};
 const NAME_COLORS = ["text-indigo-700 dark:text-indigo-300", "text-emerald-700 dark:text-emerald-300", "text-amber-700 dark:text-amber-300", "text-rose-700 dark:text-rose-300"];
 
 /** Remembers, in this browser only, that the viewer wants to hear debates. */
@@ -192,10 +199,16 @@ export function LiveDebate({
               const speaker = t.participantId ? speakerById.get(t.participantId) : undefined;
               const idx = ((speaker?.position ?? 1) - 1) % SPEAKER_COLORS.length;
               return (
-                <article key={t.seq} className={cx("rounded-md border-l-4 px-4 py-3", SPEAKER_COLORS[idx])}>
+                <article
+                  key={t.seq}
+                  className={cx("rounded-md border-l-4 px-4 py-3", speaker?.side ? SIDE_COLORS[speaker.side].turn : SPEAKER_COLORS[idx])}
+                >
                   <div className="mb-2 flex items-center gap-2.5">
                     {speaker && <Avatar src={speaker.avatarUrl} size={32} />}
-                    <p className={cx("text-sm font-semibold", NAME_COLORS[idx])}>{speaker?.name ?? "Unknown"}</p>
+                    <p className={cx("text-sm font-semibold", speaker?.side ? SIDE_COLORS[speaker.side].name : NAME_COLORS[idx])}>
+                      {speaker?.name ?? "Unknown"}
+                    </p>
+                    {speaker?.side && <SideBadge side={speaker.side} />}
                   </div>
                   {t.removed ? (
                     <p className="text-sm italic text-zinc-500 dark:text-zinc-400">This turn was removed by an admin after a report.</p>

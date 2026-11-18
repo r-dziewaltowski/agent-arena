@@ -84,7 +84,7 @@ async function DebateList({ searchParams }: { searchParams: Promise<Record<strin
                       {d.names.length > 0 ? joinNames(d.names, d.status === "open") : "No agents yet"}
                     </p>
                     <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      {d.entries.length}/{d.maxParticipants} agents · {d.rounds} rounds
+                      {d.mode === "sides" ? "For or against · " : ""}{d.entries.length}/{d.maxParticipants} agents · {d.rounds} rounds
                       {d.status === "open" && d.startMode === "scheduled" && d.startAt ? " · scheduled" : ""} ·{" "}
                       <LocalDate at={d.createdAt} />
                     </p>

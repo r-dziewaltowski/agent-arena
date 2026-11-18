@@ -6,6 +6,7 @@ import type { Db } from "../db/client";
 import { agents, debateParticipants, debates, turns, votes } from "../db/schema";
 import { createDebateSchema, VOTING_DURATIONS, type CreateDebateInput, type VotingDuration } from "../validation/debate";
 import { disambiguateNames } from "./prompt";
+import { allowedSides, alternateSides, bothSidesTaken, emptySides, SIDE_LABELS, type Side } from "./sides";
 import { TONE_DESCRIPTIONS, type Creativity, type TurnLength } from "./traits";
 import { speechDirection, voiceFor } from "../voice/voices";
 
@@ -23,6 +24,8 @@ export type LifecycleErrorCode =
   | "ALREADY_ENTERED"
   | "ONE_ENTRY_PER_USER"
   | "NOT_ENOUGH_ENTRIES"
+  | "SIDE_NEEDED"
+  | "NOT_ENOUGH_SIDES"
   | "NOT_COMPLETED"
   | "VOTING_CLOSED"
   | "OWN_AGENT"
@@ -90,6 +93,7 @@ export async function createDebate(
     id,
     creatorId,
     topic: v.topic,
+    mode: v.mode,
     rounds: v.rounds,
     maxParticipants: v.maxParticipants,
     startMode: v.startMode,
@@ -111,7 +115,7 @@ async function loadDebate(db: DbOrTx, debateId: string) {
 /** Enters one of the user's own agents into a free slot of an open debate. Returns the entry id. */
 export async function enter(
   db: Db,
-  args: { debateId: string; userId: string; agentId: string; position: number },
+  args: { debateId: string; userId: string; agentId: string; position: number; side?: Side | null },
   now = Date.now(),
   availability?: ModelAvailability,
 ): Promise<string> {
@@ -141,6 +145,19 @@ export async function enter(
     if (!debate.allowMultipleEntries && entries.some((e) => e.userId === args.userId)) {
       throw new LifecycleError("ONE_ENTRY_PER_USER", "This debate allows one agent per user.");
     }
+    // For or against: every entry takes a side, and the last free slot goes to an empty side.
+    let side: Side | null = null;
+    if (debate.mode === "sides") {
+      if (!args.side) throw new LifecycleError("SIDE_NEEDED", "Pick a side: for or against.");
+      const allowed = allowedSides(entries, debate.maxParticipants);
+      if (!allowed.includes(args.side)) {
+        throw new LifecycleError(
+          "SIDE_NEEDED",
+          `The last slot is for ${SIDE_LABELS[allowed[0]]}: each side needs at least one agent.`,
+        );
+      }
+      side = args.side;
+    }
 
     const id = randomUUID();
     try {
@@ -150,6 +167,7 @@ export async function enter(
         agentId: args.agentId,
         userId: args.userId,
         position: args.position,
+        side,
         joinedAt: now,
       });
     } catch (err) {
@@ -221,11 +239,23 @@ export async function startInTx(
   if (entries.length < 2) {
     throw new LifecycleError("NOT_ENOUGH_ENTRIES", "A debate needs at least 2 agents to start.");
   }
+  if (debate.mode === "sides" && !bothSidesTaken(entries)) {
+    throw new LifecycleError("NOT_ENOUGH_SIDES", "Each side needs at least one agent before the debate can start.");
+  }
+  // Slots are the speaking order: in a for-or-against debate the sides take turns.
+  const speakingOrder = debate.mode === "sides" ? alternateSides(entries) : entries;
+  if (debate.mode === "sides") {
+    // Park every entry outside 1..n first, so renumbering in a new order can't clash on the
+    // unique (debate, position) index.
+    for (const [i, entry] of entries.entries()) {
+      await tx.update(debateParticipants).set({ position: 1000 + i }).where(eq(debateParticipants.id, entry.id));
+    }
+  }
 
   const agentIds = entries.map((e) => e.agentId).filter((id): id is string => id !== null);
   const agentRows = await tx.select().from(agents).where(inArray(agents.id, agentIds));
   const agentById = new Map(agentRows.map((a) => [a.id, a]));
-  const ordered = entries.map((entry) => {
+  const ordered = speakingOrder.map((entry) => {
     const agent = entry.agentId ? agentById.get(entry.agentId) : undefined;
     if (!agent) throw new Error(`Entry ${entry.id} has no agent.`);
     return { entry, agent };
@@ -233,7 +263,7 @@ export async function startInTx(
   const names = disambiguateNames(ordered.map((o) => o.agent.name));
 
   const maxOutputs: number[] = [];
-  // Ascending order means each new position is <= the old one and already vacated.
+  // Ascending order means each new position is <= the old one and already vacated (or parked above).
   for (const [i, { entry, agent }] of ordered.entries()) {
     const provider = agent.provider as Provider;
     // A retired model never blocks a debate: the provider's default runs instead, and says so.
@@ -280,6 +310,10 @@ export async function startInTx(
 export const NOT_ENOUGH_AT_START_REASON =
   "Fewer than 2 agents had entered when the scheduled start time arrived.";
 
+/** Why a scheduled for-or-against debate was cancelled: nobody took one of the sides. */
+export const emptySideReason = (side: Side) =>
+  `No agent had taken the ${SIDE_LABELS[side]} side when the scheduled start time arrived.`;
+
 /** Starts (or cancels, with fewer than 2 entries) every scheduled debate whose start time has passed. */
 export async function startDueScheduled(
   db: Db,
@@ -325,16 +359,18 @@ export async function startOrCancelScheduled(
       return "unchanged";
     }
     const entries = await tx
-      .select({ id: debateParticipants.id })
+      .select({ id: debateParticipants.id, side: debateParticipants.side })
       .from(debateParticipants)
       .where(eq(debateParticipants.debateId, debateId));
-    if (entries.length >= 2) {
+    const sidesReady = debate.mode !== "sides" || bothSidesTaken(entries);
+    if (entries.length >= 2 && sidesReady) {
       await startInTx(tx, debateId, now, availability);
       return "started";
     }
+    const reason = entries.length < 2 ? NOT_ENOUGH_AT_START_REASON : emptySideReason(emptySides(entries)[0]);
     const rows = await tx
       .update(debates)
-      .set({ status: "cancelled", cancelReason: NOT_ENOUGH_AT_START_REASON })
+      .set({ status: "cancelled", cancelReason: reason })
       .where(and(eq(debates.id, debateId), eq(debates.status, "open")))
       .returning({ id: debates.id });
     return rows.length ? "cancelled" : "unchanged";
@@ -432,10 +468,14 @@ export async function deleteAgent(
   });
 }
 
-/** One vote per user per completed debate, while voting is open, never for your own agent. */
+/**
+ * One vote per user per completed debate, while voting is open, never for your own agent. In a
+ * for-or-against debate the vote also says which side convinced the voter, except from owners of
+ * an agent in it: they still pick the best agent, but don't decide which side won.
+ */
 export async function castVote(
   db: Db,
-  args: { debateId: string; userId: string; participantId: string },
+  args: { debateId: string; userId: string; participantId: string; side?: Side | null },
   now = Date.now(),
 ): Promise<void> {
   await db.transaction(async (tx) => {
@@ -454,12 +494,18 @@ export async function castVote(
     if (participant.userId === args.userId) {
       throw new LifecycleError("OWN_AGENT", "You can't vote for your own agent.");
     }
+    let side: Side | null = null;
+    if (debate.mode === "sides" && !(await hasAgentIn(tx, args.debateId, args.userId))) {
+      if (!args.side) throw new LifecycleError("SIDE_NEEDED", "Pick which side convinced you.");
+      side = args.side;
+    }
     try {
       await tx.insert(votes).values({
         id: randomUUID(),
         debateId: args.debateId,
         userId: args.userId,
         participantId: args.participantId,
+        side,
         createdAt: now,
       });
     } catch (err) {
@@ -474,4 +520,14 @@ export function isUniqueViolation(err: unknown): boolean {
     if (String((e as { message?: unknown }).message ?? e).includes("UNIQUE constraint failed")) return true;
   }
   return false;
+}
+
+/** Whether this user has an agent in the debate (owners don't answer the side question). */
+export async function hasAgentIn(db: DbOrTx, debateId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: debateParticipants.id })
+    .from(debateParticipants)
+    .where(and(eq(debateParticipants.debateId, debateId), eq(debateParticipants.userId, userId)))
+    .limit(1);
+  return !!row;
 }

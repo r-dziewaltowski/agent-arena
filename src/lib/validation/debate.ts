@@ -16,6 +16,7 @@ export const createDebateSchema = z
       .trim()
       .min(5, "Write a topic of at least 5 characters.")
       .max(200, "Keep the topic under 200 characters."),
+    mode: z.enum(["open", "sides"], { error: "Pick the kind of debate." }).default("open"),
     rounds: z.number({ error: "Pick 2 to 6 rounds." }).int().min(2, "Pick 2 to 6 rounds.").max(6, "Pick 2 to 6 rounds.").default(3),
     maxParticipants: z
       .number({ error: "Pick 2 to 4 agents." })

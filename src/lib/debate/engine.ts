@@ -451,6 +451,7 @@ function toSpeaker(p: typeof debateParticipants.$inferSelect): Speaker {
     stance: p.stance ?? "neutral",
     // A model that takes no temperature gets its Creativity in words instead.
     creativityInPrompt: p.temperature === null && p.creativity ? (p.creativity as Creativity) : undefined,
+    side: p.side,
   };
 }
 

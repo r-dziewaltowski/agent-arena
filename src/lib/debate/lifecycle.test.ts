@@ -13,6 +13,7 @@ import {
   deleteDebate,
   enter,
   LifecycleError,
+  emptySideReason,
   NOT_ENOUGH_AT_START_REASON,
   resumeDebate,
   startDebate,
@@ -344,5 +345,81 @@ describe("canSeeTally", () => {
   ] as const;
   it.each(cases)("%s, voted=%s, at %s → %s", (tallyVisibility, hasVoted, now, expected) => {
     expect(canSeeTally({ tallyVisibility, votingClosesAt: closes }, { hasVoted }, now)).toBe(expected);
+  });
+});
+
+describe("for-or-against debates", () => {
+  const sides = (extra: object = {}) => manual({ mode: "sides", maxParticipants: 3, allowMultipleEntries: true, ...extra });
+
+  it("needs a side for every entry, and keeps the last free slot for the empty side", async () => {
+    const id = await createDebate(db, "alice", sides(), NOW);
+    expect((await getDebate(id)).mode).toBe("sides");
+    const a1 = await seedAgent(db, "alice", { name: "Ada" });
+    await expectCode(enter(db, { debateId: id, userId: "alice", agentId: a1, position: 1 }, NOW), "SIDE_NEEDED");
+    await enter(db, { debateId: id, userId: "alice", agentId: a1, position: 1, side: "for" }, NOW);
+    await enter(db, { debateId: id, userId: "bob", agentId: await seedAgent(db, "bob", { name: "Bram" }), position: 2, side: "for" }, NOW);
+
+    // One slot left and nobody against: it can only go to Against.
+    const cleo = await seedAgent(db, "carol", { name: "Cleo" });
+    await expect(enter(db, { debateId: id, userId: "carol", agentId: cleo, position: 3, side: "for" }, NOW)).rejects.toThrow(
+      "The last slot is for Against: each side needs at least one agent.",
+    );
+    await enter(db, { debateId: id, userId: "carol", agentId: cleo, position: 3, side: "against" }, NOW);
+    expect((await entriesOf(id)).map((e) => e.side)).toEqual(["for", "for", "against"]);
+  });
+
+  it("ignores a side in an open discussion", async () => {
+    const id = await createDebate(db, "alice", manual(), NOW);
+    await enter(db, { debateId: id, userId: "alice", agentId: await seedAgent(db, "alice"), position: 1, side: "for" }, NOW);
+    expect((await entriesOf(id))[0].side).toBeNull();
+  });
+
+  it("won't start by hand until both sides have an agent", async () => {
+    const id = await createDebate(db, "alice", sides({ maxParticipants: 4 }), NOW);
+    await enter(db, { debateId: id, userId: "alice", agentId: await seedAgent(db, "alice"), position: 1, side: "against" }, NOW);
+    await enter(db, { debateId: id, userId: "bob", agentId: await seedAgent(db, "bob"), position: 2, side: "against" }, NOW);
+    await expectCode(startDebate(db, { debateId: id, userId: "alice" }, NOW), "NOT_ENOUGH_SIDES");
+    await enter(db, { debateId: id, userId: "carol", agentId: await seedAgent(db, "carol"), position: 4, side: "for" }, NOW);
+    await startDebate(db, { debateId: id, userId: "alice" }, NOW);
+    expect((await getDebate(id)).status).toBe("running");
+  });
+
+  it("renumbers the slots at start so For opens and the sides take turns", async () => {
+    const id = await createDebate(db, "alice", sides({ maxParticipants: 4, startMode: "when_full" }), NOW);
+    const enterAs = async (user: string, name: string, position: number, side: "for" | "against") =>
+      enter(db, { debateId: id, userId: user, agentId: await seedAgent(db, user, { name }), position, side }, NOW);
+    await enterAs("alice", "Cleo", 1, "against");
+    await enterAs("alice", "Dev", 2, "against");
+    await enterAs("bob", "Ada", 3, "for");
+    await enterAs("bob", "Bram", 4, "for"); // fills it: it starts
+    expect((await getDebate(id)).status).toBe("running");
+    expect((await entriesOf(id)).map((e) => [e.position, e.name, e.side])).toEqual([
+      [1, "Ada", "for"],
+      [2, "Cleo", "against"],
+      [3, "Bram", "for"],
+      [4, "Dev", "against"],
+    ]);
+  });
+
+  it("cancels a scheduled debate when a side is still empty at its start time", async () => {
+    const id = await createDebate(db, "alice", sides({ startMode: "scheduled", startAt: NOW + 1000 }), NOW);
+    await enter(db, { debateId: id, userId: "alice", agentId: await seedAgent(db, "alice"), position: 1, side: "for" }, NOW);
+    await enter(db, { debateId: id, userId: "bob", agentId: await seedAgent(db, "bob"), position: 2, side: "for" }, NOW);
+    expect(await startDueScheduled(db, NOW + 2000, catalogAvailability([]))).toEqual({ started: [], cancelled: [id] });
+    expect(await getDebate(id)).toMatchObject({ status: "cancelled", cancelReason: emptySideReason("against") });
+  });
+
+  it("asks viewers which side convinced them, but not owners of an agent in it", async () => {
+    const id = await createDebate(db, "alice", sides({ maxParticipants: 2 }), NOW);
+    const ada = await enter(db, { debateId: id, userId: "alice", agentId: await seedAgent(db, "alice"), position: 1, side: "for" }, NOW);
+    const bram = await enter(db, { debateId: id, userId: "bob", agentId: await seedAgent(db, "bob"), position: 2, side: "against" }, NOW);
+    await db.update(debates).set({ status: "completed", completedAt: NOW, votingClosesAt: NOW + 1000 }).where(eq(debates.id, id));
+
+    await expectCode(castVote(db, { debateId: id, userId: "carol", participantId: ada }, NOW), "SIDE_NEEDED");
+    await castVote(db, { debateId: id, userId: "carol", participantId: ada, side: "against" }, NOW);
+    // Alice owns Ada: her side is dropped even if sent; she still picks the best agent.
+    await castVote(db, { debateId: id, userId: "alice", participantId: bram, side: "for" }, NOW);
+    const rows = await db.select({ userId: votes.userId, side: votes.side }).from(votes).where(eq(votes.debateId, id));
+    expect(Object.fromEntries(rows.map((r) => [r.userId, r.side]))).toEqual({ carol: "against", alice: null });
   });
 });

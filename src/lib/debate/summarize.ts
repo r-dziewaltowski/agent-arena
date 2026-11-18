@@ -32,10 +32,11 @@ export async function maybeFoldSummary(
   const toFold = unsummarized.slice(0, unsummarized.length - CONTEXT_WINDOW);
 
   const participants = await db
-    .select({ id: debateParticipants.id, name: debateParticipants.name })
+    .select({ id: debateParticipants.id, name: debateParticipants.name, side: debateParticipants.side })
     .from(debateParticipants)
     .where(eq(debateParticipants.debateId, debateId));
-  const nameOf = new Map(participants.map((p) => [p.id, p.name ?? "Someone"]));
+  // In a for-or-against debate each name carries its side, so the summary keeps the sides apart.
+  const nameOf = new Map(participants.map((p) => [p.id, `${p.name ?? "Someone"}${p.side ? ` (${p.side})` : ""}`]));
 
   const prompt = [
     `Topic: ${debate.topic}`,

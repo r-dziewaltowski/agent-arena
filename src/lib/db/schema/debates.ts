@@ -12,6 +12,8 @@ export const debates = sqliteTable(
 
     // Configuration, fixed at creation.
     topic: text("topic").notNull(),
+    /** "open": everyone argues their own view; "sides": each agent argues for or against the topic. */
+    mode: text("mode", { enum: ["open", "sides"] }).notNull().default("open"),
     rounds: integer("rounds").notNull().default(3),
     maxParticipants: integer("max_participants").notNull(),
     startMode: text("start_mode", { enum: ["manual", "when_full", "scheduled"] }).notNull(),
@@ -87,6 +89,8 @@ export const debateParticipants = sqliteTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** Slot = speaking order, 1-based. Renumbered 1..n at start. */
     position: integer("position").notNull(),
+    /** In a for-or-against debate, the side this entry argues (chosen when entering); null otherwise. */
+    side: text("side", { enum: ["for", "against"] }),
     joinedAt: integer("joined_at").notNull(),
 
     // Snapshot of the agent, filled at start.

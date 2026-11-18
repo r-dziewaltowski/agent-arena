@@ -9,6 +9,7 @@ import { getDb } from "@/lib/db/client";
 import type { Db } from "@/lib/db/client";
 import { agents } from "@/lib/db/schema";
 import { createDebate, deleteDebate, enter, LifecycleError, resumeDebate, startDebate, withdraw } from "@/lib/debate/lifecycle";
+import { isSide, type Side } from "@/lib/debate/sides";
 import { queueDebate } from "@/lib/jobs/advance";
 import { getQueue } from "@/lib/jobs/queue";
 import { pickValues, type FormValues } from "@/lib/form-values";
@@ -36,6 +37,7 @@ async function queueSafely(db: Db, debateId: string, opts: { runningOnly?: boole
 
 const DEBATE_FIELDS = [
   "topic",
+  "mode",
   "rounds",
   "maxParticipants",
   "startMode",
@@ -58,6 +60,7 @@ export async function createDebateAction(_prev: FormState, formData: FormData): 
   try {
     id = await createDebate(db, me.id, {
       topic: String(formData.get("topic") ?? ""),
+      mode: formData.get("mode") === "sides" ? "sides" : "open",
       rounds: Number(formData.get("rounds")),
       maxParticipants: Number(formData.get("maxParticipants")),
       startMode: startMode as "manual" | "when_full" | "scheduled",
@@ -92,6 +95,7 @@ export async function enterAction(_prev: FormState, formData: FormData): Promise
         userId: me.id,
         agentId,
         position: Number(formData.get("position")),
+        side: isSide(formData.get("side")) ? (formData.get("side") as Side) : null,
       },
       Date.now(),
       await availability(),

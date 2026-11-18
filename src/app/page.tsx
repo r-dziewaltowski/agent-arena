@@ -172,7 +172,7 @@ async function HappeningNow() {
                     {joinNames(d.names, d.status === "open")}
                     <span className="text-zinc-400 dark:text-zinc-500">
                       {" "}
-                      · {d.entries.length}/{d.maxParticipants} agents · {d.rounds} rounds
+                      · {d.mode === "sides" ? "for or against · " : ""}{d.entries.length}/{d.maxParticipants} agents · {d.rounds} rounds
                     </span>
                   </p>
                 </Card>

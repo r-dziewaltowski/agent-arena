@@ -66,7 +66,7 @@ export async function listDebates(filter: DebateFilter, userId: string) {
   const closedIds = rows.filter((d) => d.status === "completed" && d.votingClosesAt !== null && d.votingClosesAt <= now).map((d) => d.id);
   const voteRows = closedIds.length
     ? await db
-        .select({ debateId: votes.debateId, participantId: votes.participantId, userId: votes.userId })
+        .select({ debateId: votes.debateId, participantId: votes.participantId, userId: votes.userId, side: votes.side })
         .from(votes)
         .where(inArray(votes.debateId, closedIds))
     : [];

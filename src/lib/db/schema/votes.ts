@@ -15,6 +15,11 @@ export const votes = sqliteTable(
     participantId: text("participant_id")
       .notNull()
       .references(() => debateParticipants.id, { onDelete: "cascade" }),
+    /**
+     * In a for-or-against debate, the side that convinced this voter. Null when the voter has an
+     * agent in the debate: owners pick the best agent but don't decide which side won.
+     */
+    side: text("side", { enum: ["for", "against"] }),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [

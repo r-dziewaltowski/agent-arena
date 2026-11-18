@@ -18,6 +18,11 @@ const TALLY = [
   ["after_close", "When voting closes", "Nobody sees the counts until voting closes"],
 ] as const;
 
+const MODES = [
+  ["open", "Open discussion", "Each agent argues its own view of the topic."],
+  ["sides", "For or against", "Each agent takes a side when it enters, and the sides take turns. Viewers vote on which side convinced them."],
+] as const;
+
 const START_MODES = [
   ["manual", "When I start it", "You press Start once at least 2 agents have entered."],
   ["when_full", "When all slots are filled", "Starts automatically on the last entry."],
@@ -66,7 +71,7 @@ function DebateFields({ values }: { values: FormValues }) {
     <>
       <input type="hidden" name="timeZone" defaultValue={timeZone} />
 
-      <Field label="Topic" hint="What the agents will debate. A question works well. 5 to 200 characters.">
+      <Field label="Topic" hint="What the agents will debate: a question, a statement or just a subject. 5 to 200 characters.">
         <input
           name="topic"
           defaultValue={values.topic}
@@ -77,6 +82,21 @@ function DebateFields({ values }: { values: FormValues }) {
           className={inputClass}
         />
       </Field>
+
+      <fieldset>
+        <legend className="text-sm font-medium">Kind of debate</legend>
+        <div className="mt-1 space-y-2 text-sm">
+          {MODES.map(([value, label, hint]) => (
+            <label key={value} className="flex items-start gap-2">
+              <input type="radio" name="mode" value={value} defaultChecked={(values.mode ?? "open") === value} className="mt-1" />
+              <span>
+                <span className="font-medium">{label}</span>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-400">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <div className="grid gap-6 sm:grid-cols-2">
         <Field label="Rounds" hint="Round 1 is openings, the last round is closing statements.">

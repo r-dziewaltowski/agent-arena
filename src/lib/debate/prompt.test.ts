@@ -222,3 +222,31 @@ describe("submittedTrait", () => {
     expect(submittedTrait(form({ style: "dry" }), "style")).toBe("dry"); // older forms
   });
 });
+
+describe("buildPrompt in a for-or-against debate", () => {
+  const pro = { ...ada, side: "for" as const };
+  const con = { ...bram, side: "against" as const };
+  const mate = { ...cleo, side: "for" as const };
+  const base = { topic: "Should cities ban cars?", rounds: 3, participants: [pro, con, mate], turns: [], othersSpokeThisRound: false };
+
+  it("tells the speaker its side, its teammates and its opponents, ahead of its stance", () => {
+    const { system } = buildPrompt({ ...base, round: 1, kind: "opening", speaker: pro });
+    expect(system).toContain("You argue FOR the topic (in favour of it; if it is a question, your answer is yes)");
+    expect(system).toContain("your stance shapes how you argue, not which side you take");
+    expect(system).toContain("Also arguing for: Cleo.");
+    expect(system).toContain("Arguing against: Bram.");
+    expect(system).not.toContain("The other participants");
+    const against = buildPrompt({ ...base, round: 1, kind: "opening", speaker: con }).system;
+    expect(against).toContain("You argue AGAINST the topic (opposed to it; if it is a question, your answer is no)");
+    expect(against).not.toContain("Also arguing");
+  });
+
+  it("asks each round for the speaker's side", () => {
+    const text = (speaker: Speaker, round: number, kind: "opening" | "argument" | "closing") =>
+      JSON.stringify(buildPrompt({ ...base, round, kind, speaker }).messages.at(-1));
+    expect(text(con, 1, "opening")).toContain("make the case against the topic");
+    expect(text(mate, 2, "argument")).toContain("Find common ground"); // its stance still applies…
+    expect(text(mate, 2, "argument")).toContain("Keep arguing for the topic, and answer the other side rather than your own.");
+    expect(text(pro, 3, "closing")).toContain("sum up the case for the topic and answer the strongest point made by the other side");
+  });
+});

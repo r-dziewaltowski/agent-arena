@@ -10,6 +10,7 @@ import { Countdown } from "@/components/debates/countdown";
 import { LiveDebate } from "@/components/debates/live-debate";
 import { EnterSlotForm, StartForm } from "@/components/debates/lobby-forms";
 import { ReportButton, type ReportChoice } from "@/components/debates/report-button";
+import { SideBadge } from "@/components/debates/side-badge";
 import { StatusBadge } from "@/components/debates/status-badge";
 import { AuthLink } from "@/components/auth-links";
 import { VotePanel } from "@/components/debates/vote-panel";
@@ -18,6 +19,7 @@ import { Badge, Button, ButtonLink, Card, Notice } from "@/components/ui";
 import { modelLabel } from "@/lib/ai/model-options";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
 import { loadDebateView, type DebateRow, type SlotEntry, type TurnView } from "@/lib/debate-view";
+import { allowedSides, emptySides, SIDE_LABELS } from "@/lib/debate/sides";
 import { agentsOf } from "@/lib/queries";
 
 export default function DebatePage(props: PageProps<"/debates/[id]">) {
@@ -62,6 +64,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
         </div>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">{debate.topic}</h1>
         <div className="mt-3 flex flex-wrap gap-1.5">
+          {debate.mode === "sides" && <Badge tone="violet">For or against</Badge>}
           <Badge>{debate.rounds} rounds</Badge>
           <Badge>Up to {debate.maxParticipants} agents</Badge>
           <Badge>{debate.allowMultipleEntries ? "Several agents per user" : "One agent per user"}</Badge>
@@ -99,6 +102,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
                   name: s.name,
                   avatarUrl: s.avatarUrl,
                   position: s.position,
+                  side: s.side,
                   price: priceOf(s.provider, s.modelId),
                 }))}
                 initialTurns={turns}
@@ -163,6 +167,11 @@ function Participants({ slots }: { slots: SlotEntry[] }) {
           <li key={s.participantId} className="flex gap-3">
             <Avatar src={s.avatarUrl} size={36} className="mt-0.5" />
             <div className="min-w-0">
+              {s.side && (
+                <p className="mb-0.5">
+                  <SideBadge side={s.side} />
+                </p>
+              )}
               <p className="font-medium">
                 {s.position}.{" "}
                 {s.agentId ? (
@@ -215,6 +224,13 @@ async function Lobby({
   const canEnter = debate.allowMultipleEntries || !alreadyIn;
   const eligible = canEnter ? myAgents.filter((a) => !enteredAgentIds.has(a.id)) : [];
   const positions = Array.from({ length: debate.maxParticipants }, (_, i) => i + 1);
+  const sides = debate.mode === "sides";
+  // Every free slot offers the same sides: both, or only the empty one when one slot is left.
+  const slotSides = sides ? allowedSides(slots, debate.maxParticipants) : null;
+  const missing = sides ? emptySides(slots)[0] : undefined;
+  let waitingFor: string | null = null;
+  if (slots.length < 2) waitingFor = "Needs at least 2 agents.";
+  else if (missing) waitingFor = `Needs an agent arguing ${SIDE_LABELS[missing]}.`;
 
   let startInfo: ReactNode;
   if (debate.startMode === "manual") startInfo = isCreator ? null : "Starts when the creator starts it.";
@@ -225,18 +241,30 @@ async function Lobby({
     <div className="space-y-6">
       <AutoRefresh />
       {startInfo && <Notice tone="blue">{startInfo}</Notice>}
+      {sides && (
+        <Notice>
+          <p>
+            <span className="font-medium">For or against.</span> Each agent takes a side when it enters; the debate starts only
+            with at least one agent on each side. For opens, and the sides take turns.
+          </p>
+          <p className="mt-1">
+            For: {slots.filter((s) => s.side === "for").length} · Against: {slots.filter((s) => s.side === "against").length}
+          </p>
+        </Notice>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {positions.map((position) => {
           const slot = slots.find((s) => s.position === position);
           return (
             <Card key={position} className="flex flex-col gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Slot {position}{position === 1 ? " · speaks first" : ""}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Slot {position}{position === 1 && !sides ? " · speaks first" : ""}</p>
               {slot ? (
                 <>
                   <div className="flex items-center gap-3">
                     <Avatar src={slot.avatarUrl} size={40} />
                     <div className="min-w-0">
+                      {slot.side && <SideBadge side={slot.side} />}
                       <p className="font-medium">{slot.name}</p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">
                         by {slot.ownerName}
@@ -258,6 +286,7 @@ async function Lobby({
                   debateId={debate.id}
                   position={position}
                   agents={eligible.map((a) => ({ id: a.id, name: a.name }))}
+                  sides={slotSides}
                 />
               ) : (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -284,7 +313,7 @@ async function Lobby({
 
       {isCreator && (
         <div className="flex flex-wrap items-center justify-between gap-4">
-          {debate.startMode === "manual" ? <StartForm debateId={debate.id} disabled={slots.length < 2} /> : <span />}
+          {debate.startMode === "manual" ? <StartForm debateId={debate.id} waitingFor={waitingFor} /> : <span />}
           <form action={deleteDebateAction}>
             <input type="hidden" name="debateId" value={debate.id} />
             <ConfirmButton variant="danger" message="Delete this debate? Entered agents are withdrawn.">

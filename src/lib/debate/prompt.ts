@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai";
+import { otherSide, type Side } from "./sides";
 import { CREATIVITY_SENTENCES, stanceOf, styleSentence, toneSentence, type Creativity } from "./traits";
 
 export type TurnKind = "opening" | "argument" | "closing";
@@ -12,6 +13,8 @@ export type Speaker = {
   stance: string;
   /** Set only for models that take no temperature: Creativity is then asked for in words. */
   creativityInPrompt?: Creativity;
+  /** In a for-or-against debate, the side this speaker argues. */
+  side?: Side | null;
 };
 
 export type PriorTurn = { participantId: string | null; content: string };
@@ -71,7 +74,7 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
       .filter(Boolean)
       .join(" "),
     `The topic: ${input.topic.trim()}`,
-    `The other participants: ${others.map((o) => o.name).join(", ")}.`,
+    speaker.side ? sidesBriefing(speaker, others) : `The other participants: ${others.map((o) => o.name).join(", ")}.`,
     [
       `Rules: speak only as ${speaker.name}, in the first person.`,
       input.answerTokens
@@ -109,9 +112,43 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
   };
 }
 
+/**
+ * A for-or-against debate: which side the speaker argues, who is with it and who against. The side
+ * comes first; the stance only shapes how it argues.
+ */
+function sidesBriefing(speaker: Speaker, others: Speaker[]): string {
+  const side = speaker.side!;
+  const team = others.filter((o) => o.side === side).map((o) => o.name);
+  const opponents = others.filter((o) => o.side !== side).map((o) => o.name);
+  return [
+    `This is a for-or-against debate. You argue ${side.toUpperCase()} the topic (${side === "for" ? "in favour of it; if it is a question, your answer is yes" : "opposed to it; if it is a question, your answer is no"}), and you keep to that side throughout: your stance shapes how you argue, not which side you take.`,
+    team.length ? `Also arguing ${side}: ${team.join(", ")}.` : "",
+    `Arguing ${otherSide(side)}: ${opponents.join(", ")}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function roundInstruction(input: PromptInput): string {
   const { round, rounds, kind, speaker } = input;
   const label = `Round ${round} of ${rounds}.`;
+  const side = speaker.side;
+  if (side) {
+    switch (kind) {
+      case "opening":
+        return [
+          label,
+          `Give your opening statement: make the case ${side} the topic, with your main reasons.`,
+          input.othersSpokeThisRound ? "You may briefly react to what was said before you." : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+      case "argument":
+        return `${label} ${stanceOf(speaker.stance).instruction} Keep arguing ${side} the topic, and answer the other side rather than your own.`;
+      case "closing":
+        return `${label} This is the final round. Give your closing statement: sum up the case ${side} the topic and answer the strongest point made by the other side. Do not introduce new arguments.`;
+    }
+  }
   switch (kind) {
     case "opening":
       return [

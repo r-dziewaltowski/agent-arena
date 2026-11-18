@@ -2,14 +2,14 @@ import { desc, eq, inArray, ne } from "drizzle-orm";
 import { avatarUrl, generatedAvatarUrl } from "./avatars";
 import { displayNames } from "./auth/session";
 import { getDb } from "./db/client";
-import { agents, debateParticipants, debates, reports, turns } from "./db/schema";
+import { agents, debateComments, debateParticipants, debates, reports, turns, user } from "./db/schema";
 import { REPORT_REASONS } from "./reports-shared";
 
 export type ReportView = {
   id: string;
   debateId: string;
   topic: string;
-  target: "topic" | "turn" | "agent";
+  target: "topic" | "turn" | "agent" | "comment";
   reason: string;
   note: string | null;
   reporterName: string;
@@ -18,6 +18,8 @@ export type ReportView = {
   resolution: string | null;
   /** The reported turn, for a turn report. */
   turn: { seq: number; speaker: string; text: string; removed: boolean } | null;
+  /** The reported chat comment, for a comment report. */
+  comment: { author: string; text: string; removed: boolean } | null;
   /** The reported agent, for an agent report. */
   agent: { name: string; agentId: string | null; avatarUrl: string; hasUpload: boolean } | null;
 };
@@ -33,6 +35,7 @@ export async function loadReports(): Promise<{ open: ReportView[]; closed: Repor
   const debateIds = ids(all.map((r) => r.debateId));
   const turnIds = ids(all.map((r) => r.turnId));
   const entryIds = ids(all.map((r) => r.participantId));
+  const commentIds = ids(all.map((r) => r.commentId));
 
   const debateRows = debateIds.length ? await db.select({ id: debates.id, topic: debates.topic }).from(debates).where(inArray(debates.id, debateIds)) : [];
   const turnRows = turnIds.length
@@ -56,14 +59,23 @@ export async function loadReports(): Promise<{ open: ReportView[]; closed: Repor
         .leftJoin(agents, eq(agents.id, debateParticipants.agentId))
         .where(inArray(debateParticipants.id, entryIds))
     : [];
+  const commentRows = commentIds.length
+    ? await db
+        .select({ id: debateComments.id, body: debateComments.body, deletedAt: debateComments.deletedAt, author: user.displayName })
+        .from(debateComments)
+        .leftJoin(user, eq(user.id, debateComments.userId))
+        .where(inArray(debateComments.id, commentIds))
+    : [];
   const names = await displayNames(all.map((r) => r.reporterId));
 
   const topicOf = new Map(debateRows.map((d) => [d.id, d.topic]));
   const turnOf = new Map(turnRows.map((t) => [t.id, t]));
   const entryOf = new Map(entryRows.map((e) => [e.id, e]));
+  const commentOf = new Map(commentRows.map((c) => [c.id, c]));
   const view = (r: (typeof all)[number]): ReportView => {
     const turn = r.turnId ? turnOf.get(r.turnId) : undefined;
     const entry = r.participantId ? entryOf.get(r.participantId) : undefined;
+    const comment = r.commentId ? commentOf.get(r.commentId) : undefined;
     return {
       id: r.id,
       debateId: r.debateId,
@@ -76,6 +88,7 @@ export async function loadReports(): Promise<{ open: ReportView[]; closed: Repor
       status: r.status,
       resolution: r.resolution,
       turn: turn ? { seq: turn.seq, speaker: turn.speaker ?? "an agent", text: turn.content, removed: turn.removedAt !== null } : null,
+      comment: comment ? { author: comment.author ?? "Someone", text: comment.body, removed: comment.deletedAt !== null } : null,
       agent: entry
         ? {
             name: entry.agentName ?? entry.name ?? "Deleted agent",

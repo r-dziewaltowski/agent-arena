@@ -5,6 +5,7 @@ import {
   deleteReportedAgentAction,
   deleteReportedDebateAction,
   dismissReportAction,
+  removeCommentAction,
   removePictureAction,
   removeTurnAction,
 } from "@/actions/reports";
@@ -82,6 +83,7 @@ function Reports({ open, closed }: { open: ReportView[]; closed: ReportView[] })
 function describe(r: ReportView): string {
   if (r.target === "turn") return r.turn ? `Turn ${r.turn.seq} by ${r.turn.speaker}` : "A turn";
   if (r.target === "agent") return `The agent ${r.agent?.name ?? ""}`.trim();
+  if (r.target === "comment") return r.comment ? `A chat comment by ${r.comment.author}` : "A chat comment";
   return "The topic";
 }
 
@@ -103,6 +105,11 @@ function ReportCard({ report: r }: { report: ReportView }) {
       {r.turn && (
         <blockquote className="border-l-4 border-zinc-300 pl-3 text-sm whitespace-pre-wrap text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">
           {r.turn.removed ? <em>(already removed)</em> : r.turn.text}
+        </blockquote>
+      )}
+      {r.comment && (
+        <blockquote className="border-l-4 border-zinc-300 pl-3 text-sm whitespace-pre-wrap text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">
+          {r.comment.removed ? <em>(already deleted)</em> : r.comment.text}
         </blockquote>
       )}
       {r.agent && (
@@ -131,6 +138,14 @@ function ReportCard({ report: r }: { report: ReportView }) {
             {hidden}
             <ConfirmButton variant="danger" confirmLabel="Remove" message={`Remove the text of turn ${r.turn.seq}? It will show as removed by an admin. This can't be undone.`}>
               Remove this turn&apos;s text
+            </ConfirmButton>
+          </form>
+        )}
+        {r.comment && !r.comment.removed && (
+          <form action={removeCommentAction}>
+            {hidden}
+            <ConfirmButton variant="danger" confirmLabel="Remove" message={`Remove ${r.comment.author}'s comment? It will show as removed by an admin.`}>
+              Remove comment
             </ConfirmButton>
           </form>
         )}

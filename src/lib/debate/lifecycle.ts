@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, lte } from "drizzle-orm";
 import { catalogAvailability, type ModelAvailability } from "../ai/models";
 import { defaultModelFor, resolveSettings, type Provider } from "../ai/provider";
 import type { Db } from "../db/client";
-import { agents, debateParticipants, debates, turns, votes } from "../db/schema";
+import { agents, debateComments, debateParticipants, debates, turns, votes } from "../db/schema";
 import { createDebateSchema, VOTING_DURATIONS, type CreateDebateInput, type VotingDuration } from "../validation/debate";
 import { disambiguateNames } from "./prompt";
 import { allowedSides, alternateSides, bothSidesTaken, emptySides, SIDE_LABELS, type Side } from "./sides";
@@ -430,6 +430,7 @@ export async function deleteDebate(
     }
     await tx.delete(votes).where(eq(votes.debateId, args.debateId));
     await tx.delete(turns).where(eq(turns.debateId, args.debateId));
+    await tx.delete(debateComments).where(eq(debateComments.debateId, args.debateId));
     await tx.delete(debateParticipants).where(eq(debateParticipants.debateId, args.debateId));
     await tx.delete(debates).where(eq(debates.id, args.debateId));
   });

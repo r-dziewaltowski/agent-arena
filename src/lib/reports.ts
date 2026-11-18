@@ -1,12 +1,12 @@
 /**
- * Reports: signed-in people flag part of a debate (its topic, a turn, or an agent's name or
- * picture) for the admins, who act on them from /admin. Nothing is hidden automatically:
+ * Reports: signed-in people flag part of a debate (its topic, a turn, an agent's name or
+ * picture, or a chat comment) for the admins, who act on them from /admin. Nothing is hidden automatically:
  * on a small site, a few accounts could otherwise hide any debate they dislike.
  */
 import { randomUUID } from "node:crypto";
 import { and, count, eq, gt, inArray, type SQL } from "drizzle-orm";
 import type { Db } from "./db/client";
-import { agentImages, agents, debateParticipants, debates, reports, turnAudio, turns } from "./db/schema";
+import { agentImages, agents, debateComments, debateParticipants, debates, reports, turnAudio, turns } from "./db/schema";
 import { isUniqueViolation } from "./debate/lifecycle";
 
 import { REPORT_NOTE_MAX_LENGTH, type ReportReason, type ReportTarget } from "./reports-shared";
@@ -27,7 +27,7 @@ export class ReportError extends Error {
 export type NewReport = {
   debateId: string;
   target: ReportTarget;
-  /** The turn or participant reported; ignored for the topic. */
+  /** The turn, participant or comment reported; ignored for the topic. */
   targetId?: string | null;
   reason: ReportReason;
   note?: string | null;
@@ -41,6 +41,7 @@ export async function createReport(db: Db, input: NewReport, now: number): Promi
 
   let turnId: string | null = null;
   let participantId: string | null = null;
+  let commentId: string | null = null;
   if (input.target === "turn") {
     const [turn] = await db
       .select({ id: turns.id, kind: turns.kind })
@@ -55,6 +56,14 @@ export async function createReport(db: Db, input: NewReport, now: number): Promi
       .where(and(eq(debateParticipants.id, input.targetId ?? ""), eq(debateParticipants.debateId, input.debateId)));
     if (!entry) throw new ReportError("NOT_FOUND", "Pick one of the debate's agents.");
     participantId = entry.id;
+  } else if (input.target === "comment") {
+    const [comment] = await db
+      .select({ id: debateComments.id, userId: debateComments.userId, deletedAt: debateComments.deletedAt })
+      .from(debateComments)
+      .where(and(eq(debateComments.id, input.targetId ?? ""), eq(debateComments.debateId, input.debateId)));
+    if (!comment || comment.deletedAt !== null) throw new ReportError("NOT_FOUND", "That comment has been deleted.");
+    if (comment.userId === input.reporterId) throw new ReportError("NOT_FOUND", "You can delete your own comment instead.");
+    commentId = comment.id;
   }
 
   const [{ sent }] = await db
@@ -71,7 +80,8 @@ export async function createReport(db: Db, input: NewReport, now: number): Promi
       target: input.target,
       turnId,
       participantId,
-      targetKey: turnId ?? participantId ?? "",
+      commentId,
+      targetKey: turnId ?? participantId ?? commentId ?? "",
       reason: input.reason,
       note: input.note?.trim().slice(0, REPORT_NOTE_MAX_LENGTH) || null,
       reporterId: input.reporterId,
@@ -112,6 +122,12 @@ export async function removeTurnText(db: Db, turnId: string, adminId: string, no
   await db.update(turns).set({ content: "", audioMarks: null, removedAt: now, updatedAt: now }).where(eq(turns.id, turnId));
   await db.delete(turnAudio).where(eq(turnAudio.turnId, turnId));
   await resolveMatching(db, eq(reports.turnId, turnId), { adminId, now, resolution: "Removed the turn's text" });
+}
+
+/** Removes a chat comment (it shows as removed by an admin) and closes the reports about it. */
+export async function removeComment(db: Db, commentId: string, adminId: string, now: number): Promise<void> {
+  await db.update(debateComments).set({ body: "", deletedAt: now, deletedBy: "admin" }).where(eq(debateComments.id, commentId));
+  await resolveMatching(db, eq(reports.commentId, commentId), { adminId, now, resolution: "Removed the comment" });
 }
 
 /** The participant entries of an agent, in every debate (to close reports about it). */

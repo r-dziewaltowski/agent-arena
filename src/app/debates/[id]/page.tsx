@@ -6,6 +6,7 @@ import { deleteDebateAction, withdrawAction } from "@/actions/debates";
 import { Avatar } from "@/components/avatar";
 import { ConfirmButton } from "@/components/confirm-button";
 import { AutoRefresh } from "@/components/debates/auto-refresh";
+import { ChatFeedProvider, ChatPanel } from "@/components/debates/chat";
 import { Countdown } from "@/components/debates/countdown";
 import { LiveDebate } from "@/components/debates/live-debate";
 import { EnterSlotForm, StartForm } from "@/components/debates/lobby-forms";
@@ -18,6 +19,8 @@ import { FailureNotice } from "@/components/debates/failure-notice";
 import { Badge, Button, ButtonLink, Card, Notice } from "@/components/ui";
 import { modelLabel } from "@/lib/ai/model-options";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
+import { commentViews, loadComments } from "@/lib/chat";
+import { getDb } from "@/lib/db/client";
 import { loadDebateView, type DebateRow, type SlotEntry, type TurnView } from "@/lib/debate-view";
 import { allowedSides, emptySides, SIDE_LABELS } from "@/lib/debate/sides";
 import { agentsOf } from "@/lib/queries";
@@ -45,6 +48,11 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
   // The last turns may still be being shown (and spoken) after the debate has finished.
   const stillShowing = upcoming !== null || turns.some((t) => t.status === "streaming");
   const isCreator = !!me && debate.creatorId === me.id;
+  // The chat: open while the debate is live for viewers, then kept on the page, read-only.
+  const live = debate.status === "running" || ((debate.status === "completed" || debate.status === "failed") && stillShowing);
+  const hasChat = debate.status !== "open" && debate.status !== "cancelled";
+  const db = await getDb();
+  const comments = hasChat ? await commentViews(db, debate.id, await loadComments(db, debate.id), me?.id ?? null) : [];
 
   return (
     <div className="space-y-6">
@@ -75,59 +83,74 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
       {debate.status === "open" ? (
         <Lobby debate={debate} slots={slots} me={me} isCreator={isCreator} />
       ) : (
-        <div className="grid gap-6 md:grid-cols-[1fr_16rem]">
-          <div>
-            {debate.status === "failed" && (
-              <div className="mb-6">
-                <FailureNotice
+        <ChatFeedProvider initial={comments} since={loadedAt}>
+          <div className="grid gap-6 md:grid-cols-[1fr_18rem]">
+            <div>
+              {debate.status === "failed" && (
+                <div className="mb-6">
+                  <FailureNotice
+                    debateId={debate.id}
+                    errorMessage={debate.errorMessage}
+                    canManage={isCreator || !!me?.isAdmin}
+                  />
+                </div>
+              )}
+              {debate.status === "cancelled" ? (
+                <Notice tone="amber">
+                  <p className="font-medium">This debate was cancelled.</p>
+                  <p className="mt-1">{debate.cancelReason}</p>
+                </Notice>
+              ) : (
+                <LiveDebate
+                  // Remount when the status changes (e.g. resumed after a failure) so polling restarts.
+                  key={debate.status}
                   debateId={debate.id}
-                  errorMessage={debate.errorMessage}
-                  canManage={isCreator || !!me?.isAdmin}
+                  rounds={debate.rounds}
+                  speakers={slots.map((s) => ({
+                    participantId: s.participantId,
+                    name: s.name,
+                    avatarUrl: s.avatarUrl,
+                    position: s.position,
+                    side: s.side,
+                    price: priceOf(s.provider, s.modelId),
+                  }))}
+                  initialTurns={turns}
+                  initialUpcoming={upcoming}
+                  serverNow={loadedAt}
+                  wordsPerSecond={wordsPerSecond}
+                  voiceOn={voiceOn}
+                  initial={{
+                    status: debate.status,
+                    waitingReason: debate.waitingReason,
+                    nextAttemptAt: debate.nextAttemptAt,
+                    totalPromptTokens: debate.totalPromptTokens,
+                    totalCompletionTokens: debate.totalCompletionTokens,
+                    silenced: slots
+                      .filter((s) => s.silencedReason)
+                      .map((s) => ({ participantId: s.participantId, reason: s.silencedReason })),
+                  }}
                 />
-              </div>
-            )}
-            {debate.status === "cancelled" ? (
-              <Notice tone="amber">
-                <p className="font-medium">This debate was cancelled.</p>
-                <p className="mt-1">{debate.cancelReason}</p>
-              </Notice>
-            ) : (
-              <LiveDebate
-                // Remount when the status changes (e.g. resumed after a failure) so polling restarts.
-                key={debate.status}
-                debateId={debate.id}
-                rounds={debate.rounds}
-                speakers={slots.map((s) => ({
-                  participantId: s.participantId,
-                  name: s.name,
-                  avatarUrl: s.avatarUrl,
-                  position: s.position,
-                  side: s.side,
-                  price: priceOf(s.provider, s.modelId),
-                }))}
-                initialTurns={turns}
-                initialUpcoming={upcoming}
-                serverNow={loadedAt}
-                wordsPerSecond={wordsPerSecond}
-                voiceOn={voiceOn}
-                initial={{
-                  status: debate.status,
-                  waitingReason: debate.waitingReason,
-                  nextAttemptAt: debate.nextAttemptAt,
-                  totalPromptTokens: debate.totalPromptTokens,
-                  totalCompletionTokens: debate.totalCompletionTokens,
-                  silenced: slots
-                    .filter((s) => s.silencedReason)
-                    .map((s) => ({ participantId: s.participantId, reason: s.silencedReason })),
-                }}
-              />
-            )}
-            {debate.status === "completed" && !stillShowing && (
-              <VotePanel debate={debate} slots={slots} votes={votes} viewerId={me?.id ?? null} now={loadedAt} />
-            )}
+              )}
+              {debate.status === "completed" && !stillShowing && (
+                <VotePanel debate={debate} slots={slots} votes={votes} viewerId={me?.id ?? null} now={loadedAt} />
+              )}
+              {hasChat && !live && comments.length > 0 && (
+                <details className="mt-6">
+                  <summary className="cursor-pointer text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                    Chat during the debate ({comments.length} comment{comments.length === 1 ? "" : "s"})
+                  </summary>
+                  <div className="mt-3">
+                    <ChatPanel debateId={debate.id} open={false} signedIn={!!me} />
+                  </div>
+                </details>
+              )}
+            </div>
+            <div className="space-y-6">
+              <Participants slots={slots} />
+              {live && <ChatPanel debateId={debate.id} open signedIn={!!me} />}
+            </div>
           </div>
-          <Participants slots={slots} />
-        </div>
+        </ChatFeedProvider>
       )}
 
       {me?.isAdmin && debate.status !== "open" && (

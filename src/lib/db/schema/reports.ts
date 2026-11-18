@@ -1,10 +1,11 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { user } from "./auth";
+import { debateComments } from "./comments";
 import { debateParticipants, debates, turns } from "./debates";
 
 /**
- * Someone signed in flagging part of a debate for an admin: its topic, one turn, or one agent (its
- * name or picture). Only admins see reports; they act on them from /admin.
+ * Someone signed in flagging part of a debate for an admin: its topic, one turn, one agent (its
+ * name or picture), or one chat comment. Only admins see reports; they act on them from /admin.
  */
 export const reports = sqliteTable(
   "reports",
@@ -13,12 +14,14 @@ export const reports = sqliteTable(
     debateId: text("debate_id")
       .notNull()
       .references(() => debates.id, { onDelete: "cascade" }),
-    target: text("target", { enum: ["topic", "turn", "agent"] }).notNull(),
+    target: text("target", { enum: ["topic", "turn", "agent", "comment"] }).notNull(),
     /** Set when the target is a turn. */
     turnId: text("turn_id").references(() => turns.id, { onDelete: "cascade" }),
     /** Set when the target is an agent (its entry in this debate, which outlives a deleted agent). */
     participantId: text("participant_id").references(() => debateParticipants.id, { onDelete: "cascade" }),
-    /** The turn or participant id, or "" for the topic: what one person may report only once. */
+    /** Set when the target is a chat comment. */
+    commentId: text("comment_id").references(() => debateComments.id, { onDelete: "cascade" }),
+    /** The turn, participant or comment id, or "" for the topic: what one person may report only once. */
     targetKey: text("target_key").notNull(),
     reason: text("reason", { enum: ["offensive", "sexual", "real_person", "spam", "other"] }).notNull(),
     note: text("note"),

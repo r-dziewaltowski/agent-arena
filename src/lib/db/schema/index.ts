@@ -5,3 +5,4 @@ export * from "./votes";
 export * from "./connections";
 export * from "./reports";
 export * from "./messages";
+export * from "./comments";

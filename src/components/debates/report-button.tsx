@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useRef, type RefObject } from "react";
 import { reportAction, type ReportFormState } from "@/actions/reports";
 import { Button, Field, inputClass, Notice } from "@/components/ui";
 import { REPORT_NOTE_MAX_LENGTH, REPORT_REASONS } from "@/lib/reports-shared";
@@ -13,14 +13,36 @@ export type ReportChoice = { value: string; label: string };
  */
 export function ReportButton({ debateId, choices }: { debateId: string; choices: ReportChoice[] }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [state, formAction, pending] = useActionState<ReportFormState, FormData>(reportAction, {});
-
   return (
     <>
       <Button type="button" variant="ghost" className="px-2 py-1 text-xs" onClick={() => dialog.current?.showModal()}>
         <FlagIcon />
         Report
       </Button>
+      <ReportDialog dialog={dialog} debateId={debateId} choices={choices} />
+    </>
+  );
+}
+
+/**
+ * The Report form in a dialog, opened with `dialog.current.showModal()`. With `fixed`, it reports
+ * that one thing (a chat comment) and only asks why.
+ */
+export function ReportDialog({
+  dialog,
+  debateId,
+  choices = [],
+  fixed,
+}: {
+  dialog: RefObject<HTMLDialogElement | null>;
+  debateId: string;
+  choices?: ReportChoice[];
+  fixed?: ReportChoice;
+}) {
+  const [state, formAction, pending] = useActionState<ReportFormState, FormData>(reportAction, {});
+
+  return (
+    <>
       <dialog
         ref={dialog}
         aria-label="Report this debate"
@@ -47,18 +69,25 @@ export function ReportButton({ debateId, choices }: { debateId: string; choices:
             </p>
             {state.message && <Notice tone="red">{state.message}</Notice>}
             <input type="hidden" name="debateId" value={debateId} />
-            <Field label="What's the problem with?">
-              <select name="about" required defaultValue="" className={inputClass}>
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {choices.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
+            {fixed ? (
+              <>
+                <input type="hidden" name="about" value={fixed.value} />
+                <p className="rounded-md bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">{fixed.label}</p>
+              </>
+            ) : (
+              <Field label="What's the problem with?">
+                <select name="about" required defaultValue="" className={inputClass}>
+                  <option value="" disabled>
+                    Choose…
                   </option>
-                ))}
-              </select>
-            </Field>
+                  {choices.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label="Why?">
               <select name="reason" required defaultValue="" className={inputClass}>
                 <option value="" disabled>
@@ -89,7 +118,7 @@ export function ReportButton({ debateId, choices }: { debateId: string; choices:
   );
 }
 
-function FlagIcon() {
+export function FlagIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="mr-1 inline size-3.5 -translate-y-px" aria-hidden>
       <path d="M5 17V3m0 1h9l-2 3.5 2 3.5H5" strokeLinecap="round" strokeLinejoin="round" />

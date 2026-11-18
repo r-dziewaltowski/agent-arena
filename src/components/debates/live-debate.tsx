@@ -6,9 +6,11 @@ import { Avatar } from "@/components/avatar";
 import { Notice, cx } from "@/components/ui";
 import { costUsd, formatUsd, type Price } from "@/lib/ai/pricing";
 import { revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
+import type { CommentView } from "@/lib/chat-shared";
 import type { TurnView, UpcomingTurn } from "@/lib/debate-view";
 import type { Side } from "@/lib/debate/sides";
 import { charsAt } from "@/lib/voice/marks";
+import { useChatFeed } from "./chat";
 import { Countdown } from "./countdown";
 import { SideBadge } from "./side-badge";
 
@@ -25,7 +27,7 @@ type LiveState = {
   silenced: Silenced[];
 };
 
-type TurnsResponse = LiveState & { turns: TurnView[]; upcoming: UpcomingTurn | null; serverNow: number };
+type TurnsResponse = LiveState & { turns: TurnView[]; upcoming: UpcomingTurn | null; serverNow: number; comments?: CommentView[] };
 
 const SPEAKER_COLORS = [
   "border-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/40",
@@ -52,7 +54,8 @@ function roundTitle(round: number, rounds: number) {
 }
 
 /**
- * The transcript. While the debate runs it polls the turns endpoint about once a second. A turn
+ * The transcript. While the debate runs it polls the turns endpoint about once a second (bringing
+ * the chat's new comments too, when the page has a chat). A turn
  * being shown arrives whole, with its timing: this view reveals it word by word on the server's
  * clock, or, when listening, in step with the turn's speech (lib/debate/pacing.ts, lib/voice/marks.ts).
  */
@@ -89,6 +92,11 @@ export function LiveDebate({
     offsetRef.current ??= serverNow - Date.now();
     return Date.now() + offsetRef.current;
   }, [serverNow]);
+  const feed = useChatFeed();
+  const feedRef = useRef(feed);
+  useEffect(() => {
+    feedRef.current = feed;
+  });
   const turnsRef = useRef(turns);
   useEffect(() => {
     turnsRef.current = turns;
@@ -107,7 +115,8 @@ export function LiveDebate({
       const after = Math.max(0, ...turnsRef.current.filter((t) => t.status === "complete").map((t) => t.seq));
       try {
         const sentAt = Date.now();
-        const res = await fetch(`/api/debates/${debateId}/turns?after=${after}`, { cache: "no-store" });
+        const chat = feedRef.current ? `&commentsSince=${feedRef.current.cursor()}` : "";
+        const res = await fetch(`/api/debates/${debateId}/turns?after=${after}${chat}`, { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as TurnsResponse;
           if (stopped) return;
@@ -120,6 +129,7 @@ export function LiveDebate({
             return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
           });
           setUpcoming(data.upcoming);
+          feedRef.current?.merge(data.comments ?? [], data.serverNow);
           setState({
             status: data.status,
             waitingReason: data.waitingReason,

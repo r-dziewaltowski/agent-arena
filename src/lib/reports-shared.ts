@@ -8,6 +8,6 @@ export const REPORT_REASONS = {
   other: "Something else",
 } as const;
 export type ReportReason = keyof typeof REPORT_REASONS;
-export type ReportTarget = "topic" | "turn" | "agent";
+export type ReportTarget = "topic" | "turn" | "agent" | "comment";
 
 export const REPORT_NOTE_MAX_LENGTH = 500;

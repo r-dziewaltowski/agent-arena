@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { requireAdmin, requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
-import { debateParticipants, debates, reports, turns, user } from "@/lib/db/schema";
+import { debateComments, debateParticipants, debates, reports, turns, user } from "@/lib/db/schema";
 import { deleteAgent, deleteDebate, LifecycleError } from "@/lib/debate/lifecycle";
 import { sendEmail } from "@/lib/email/send";
 import { reportReceived } from "@/lib/email/templates";
@@ -14,6 +14,7 @@ import {
   createReport,
   dismissReport,
   removeAgentPicture,
+  removeComment,
   removeTurnText,
   REPORT_NOTE_MAX_LENGTH,
   REPORT_REASONS,
@@ -26,8 +27,8 @@ export type ReportFormState = { sent?: boolean; message?: string };
 
 const reportSchema = z.object({
   debateId: z.string().min(1),
-  /** "topic", "turn:<id>" or "agent:<participant id>". */
-  about: z.string().regex(/^(topic|turn:.+|agent:.+)$/, "Pick what you're reporting."),
+  /** "topic", "turn:<id>", "agent:<participant id>" or "comment:<id>". */
+  about: z.string().regex(/^(topic|turn:.+|agent:.+|comment:.+)$/, "Pick what you're reporting."),
   reason: z.enum(Object.keys(REPORT_REASONS) as [ReportReason, ...ReportReason[]], { error: "Pick a reason." }),
   note: z.string().max(REPORT_NOTE_MAX_LENGTH, `Keep the note under ${REPORT_NOTE_MAX_LENGTH} characters.`).optional(),
 });
@@ -43,7 +44,7 @@ export async function reportAction(_prev: ReportFormState, formData: FormData): 
   });
   if (!parsed.success) return { message: parsed.error.issues[0]?.message ?? "Please check the form." };
   const { debateId, about, reason, note } = parsed.data;
-  const [target, targetId] = about.includes(":") ? (about.split(/:(.+)/) as ["turn" | "agent", string]) : ["topic" as const, null];
+  const [target, targetId] = about.includes(":") ? (about.split(/:(.+)/) as ["turn" | "agent" | "comment", string]) : ["topic" as const, null];
 
   const db = await getDb();
   try {
@@ -81,6 +82,13 @@ async function notifyAdmins(debateId: string, target: string, targetId: string |
   } else if (target === "agent" && targetId) {
     const [entry] = await db.select({ name: debateParticipants.name }).from(debateParticipants).where(eq(debateParticipants.id, targetId));
     what = `the agent ${entry?.name ?? ""}`.trim();
+  } else if (target === "comment" && targetId) {
+    const [comment] = await db
+      .select({ body: debateComments.body, author: user.displayName })
+      .from(debateComments)
+      .leftJoin(user, eq(user.id, debateComments.userId))
+      .where(eq(debateComments.id, targetId));
+    what = comment ? `a chat comment by ${comment.author ?? "someone"}: "${comment.body}"` : "a chat comment";
   }
   const h = await headers();
   const origin = h.get("origin") ?? `https://${h.get("host")}`;
@@ -110,6 +118,13 @@ export async function removeTurnAction(formData: FormData) {
   const me = await requireAdmin();
   const { db, report } = await reportOf(formData);
   if (report?.turnId) await removeTurnText(db, report.turnId, me.id, Date.now());
+  refresh();
+}
+
+export async function removeCommentAction(formData: FormData) {
+  const me = await requireAdmin();
+  const { db, report } = await reportOf(formData);
+  if (report?.commentId) await removeComment(db, report.commentId, me.id, Date.now());
   refresh();
 }
 

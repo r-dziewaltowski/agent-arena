@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { callSettings, resolveSettings } from "../ai/provider";
+import { callSettings, resolveSettings, THINKING_ROOM_TOKENS } from "../ai/provider";
 import {
   buildPrompt,
   cleanTurnText,
@@ -71,7 +71,7 @@ describe("buildPrompt", () => {
       participants: [ada, bram],
       turns: [],
       othersSpokeThisRound: false,
-      maxOutputTokens: 220,
+      answerTokens: 220,
     });
     expect(p.system).toContain("Keep it under 130 words");
   });
@@ -162,6 +162,16 @@ describe("resolveSettings and callSettings", () => {
     expect(callSettings("groq", "some-other-model", base)).toEqual(base);
   });
 
+  it("gives models that think first extra room in their cap, not in the word target", () => {
+    // GPT-OSS thinks (reasoning "low"), Qwen doesn't ("none"); Gemini Flash-Lite at "minimal" stays under the cap.
+    expect(resolveSettings("groq", "balanced", "short", "openai/gpt-oss-120b").maxOutputTokens).toBe(120 + THINKING_ROOM_TOKENS);
+    expect(resolveSettings("groq", "balanced", "short", "qwen/qwen3.8-27b").maxOutputTokens).toBe(120);
+    expect(resolveSettings("google", "balanced", "short", "gemini-3.5-flash-lite").maxOutputTokens).toBe(120);
+    expect(resolveSettings("openrouter", "balanced", "long", "openai/gpt-5.6-luna").maxOutputTokens).toBe(400 + THINKING_ROOM_TOKENS);
+    expect(resolveSettings("openrouter", "balanced", "long", "nvidia/nemotron-3-ultra-550b-a55b:free").maxOutputTokens).toBe(400);
+    expect(resolveSettings("ollama", "balanced", "long", "llama3.2").maxOutputTokens).toBe(400);
+  });
+
   it("gives Google the same temperatures, with minimal thinking for Gemini and none for Gemma", () => {
     expect(resolveSettings("google", "focused", "short")).toEqual({ temperature: 0.3, maxOutputTokens: 120 });
     const base = { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] };
@@ -176,7 +186,7 @@ describe("resolveSettings and callSettings", () => {
   it("leaves out what each OpenRouter model rejects, and keeps its reasoning out of the reply", () => {
     const base = { temperature: 0.7, maxOutputTokens: 220, stopSequences: ["\nBram:"] };
     // Claude: no temperature (Creativity goes in the prompt), stop sequences kept.
-    expect(resolveSettings("openrouter", "wild", "medium", "anthropic/claude-haiku-5.5")).toEqual({ temperature: null, maxOutputTokens: 220 });
+    expect(resolveSettings("openrouter", "wild", "medium", "anthropic/claude-haiku-5.5")).toEqual({ temperature: null, maxOutputTokens: 320 });
     expect(callSettings("openrouter", "anthropic/claude-haiku-5.5", { ...base, temperature: undefined })).toEqual({
       maxOutputTokens: 220,
       stopSequences: ["\nBram:"],

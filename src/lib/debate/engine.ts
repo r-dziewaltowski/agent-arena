@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { streamText } from "ai";
 import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 import {
+  ANSWER_TOKENS,
   callSettings,
   freeSummaryModel,
   resolveModel as defaultResolveModel,
@@ -14,7 +15,7 @@ import { keyRefusalReason, loadKey, markKeyFailed, markKeyUsed, NOT_CONNECTED_RE
 import { deleteHeardAudio } from "../voice/cleanup";
 import { defaultSpeechMaker, type Speech, type SpeechMaker } from "../voice/speech";
 import { voiceFor } from "../voice/voices";
-import type { Creativity } from "./traits";
+import { TURN_LENGTHS, type Creativity, type TurnLength } from "./traits";
 import { publishChunk } from "./broadcast";
 import { votingClosesAtFor } from "./lifecycle";
 import { buildPrompt, cleanTurnText, trimToLastSentence, turnKindFor, type Speaker } from "./prompt";
@@ -196,7 +197,10 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       turns: visibleTurns.map((t) => ({ participantId: t.participantId, content: t.content })),
       summary: debate.summary,
       othersSpokeThisRound: done.some((t) => t.round === round && t.kind !== "summary"),
-      maxOutputTokens: speakerRow.maxOutputTokens ?? undefined,
+      // The word target comes from the turn length alone: any thinking room in the cap isn't for words.
+      answerTokens: TURN_LENGTHS.includes(speakerRow.turnLength as TurnLength)
+        ? ANSWER_TOKENS[speakerRow.turnLength as TurnLength]
+        : (speakerRow.maxOutputTokens ?? undefined),
     });
 
     const seq = (done.at(-1)?.seq ?? 0) + 1;

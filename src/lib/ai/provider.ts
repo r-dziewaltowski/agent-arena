@@ -86,11 +86,31 @@ export function defaultModelFor(provider: Provider): string {
   }
 }
 
-const MAX_OUTPUT_TOKENS: Record<TurnLength, number> = { short: 120, medium: 220, long: 400 };
+/** Tokens for the turn people read, by turn length; the prompt asks for a word count that fits. */
+export const ANSWER_TOKENS: Record<TurnLength, number> = { short: 120, medium: 220, long: 400 };
+
+/**
+ * Extra cap for models that think before answering: their hidden thinking counts toward the cap.
+ * Measured on production (2026-11-18): GPT-OSS 120B spent ~30-40 of a short turn's 120 tokens
+ * thinking, and 1 turn in 9 was cut to 43 words. The word target stays the same, so turns don't
+ * get longer; they just don't get cut short.
+ */
+export const THINKING_ROOM_TOKENS = 100;
+
+/**
+ * Whether a model is set to think before answering. Google's models are left out: Flash-Lite at
+ * "minimal" stayed well under the cap (short turns: 85 tokens at most).
+ */
+export function thinksFirst(provider: Provider, modelId?: string): boolean {
+  const entry = modelId === undefined ? undefined : findModel(provider, modelId);
+  if (!entry) return false;
+  return (entry.reasoning !== undefined && entry.reasoning.effort !== "none") || (entry.openRouterReasoning !== undefined && entry.openRouterReasoning !== "none");
+}
 
 /**
  * Turns an agent's labels into the numbers sent to the model, for its provider. Models that reject
- * a temperature get none (null): their Creativity is described in the prompt instead.
+ * a temperature get none (null): their Creativity is described in the prompt instead. Models that
+ * think first get extra room in their cap for it.
  */
 export function resolveSettings(
   provider: Provider,
@@ -101,7 +121,7 @@ export function resolveSettings(
   const takesTemperature = modelId === undefined || findModel(provider, modelId)?.supportsTemperature !== false;
   return {
     temperature: takesTemperature ? TEMPERATURES[provider][creativity] : null,
-    maxOutputTokens: MAX_OUTPUT_TOKENS[turnLength],
+    maxOutputTokens: ANSWER_TOKENS[turnLength] + (thinksFirst(provider, modelId) ? THINKING_ROOM_TOKENS : 0),
   };
 }
 

@@ -1,4 +1,5 @@
 import { simulateReadableStream } from "ai";
+import { THINKING_ROOM_TOKENS } from "../ai/provider";
 import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -117,6 +118,20 @@ describe("runStep", () => {
     const text = JSON.stringify(secondCall.prompt);
     expect(text).toContain("You are Bram");
     expect(text).toContain("Ada: First point.");
+  });
+
+  it("gives a model that thinks first more cap but asks it for the same number of words", async () => {
+    const debateId = await createDebate(db, "alice", { topic: "Should cities ban cars?", rounds: 2, maxParticipants: 2, startMode: "manual" }, clock.now());
+    const thinker = { provider: "groq", modelId: "openai/gpt-oss-120b", turnLength: "short" } as const;
+    await enter(db, { debateId, userId: "alice", agentId: await seedAgent(db, "alice", { name: "Ada", ...thinker }), position: 1 });
+    await enter(db, { debateId, userId: "bob", agentId: await seedAgent(db, "bob", { name: "Bram", ...thinker }), position: 2 });
+    await startDebate(db, { debateId, userId: "alice" }, clock.now());
+    const model = scriptedModel(["First point."]);
+    await runStep(db, debateId, { resolveModel: resolverFor(model), now: clock.now });
+
+    const call = model.doStreamCalls[0];
+    expect(call.maxOutputTokens).toBe(120 + THINKING_ROOM_TOKENS);
+    expect(JSON.stringify(call.prompt)).toContain("Keep it under 70 words"); // a short turn's target, as before
   });
 
   it("trims a turn cut off by the length cap back to its last full sentence", async () => {

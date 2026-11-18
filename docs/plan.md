@@ -122,7 +122,7 @@ Model settings: owners never see raw numbers. `creativity` and `turnLength` are 
 | creative | 1.0 | 1.0 | 0.8 |
 | wild | 1.3 | 1.3 | 1.0 |
 
-turnLength: short 120, medium 220, long 400 tokens.
+turnLength: short 120, medium 220, long 400 tokens. Models set to think before answering (Groq GPT-OSS at `low`; OpenRouter models at `low` or `minimal`) get 100 more (`THINKING_ROOM_TOKENS`), because hidden thinking counts toward the cap; the prompt's word target still comes from the turn length alone, so turns don't get longer. Added 2026-11-18 after measuring production: the debate budget was never reached (27% used on average, 31% at most; the largest prompt was 743 tokens), but GPT-OSS 120B spent ~30-40 of a short turn's 120 tokens thinking and 1 short turn in 9 was cut to 43 words. Google's Flash-Lite at `minimal` stayed under the cap (85 at most), so it gets no extra room.
 
 Model catalog (`src/lib/ai/models.ts`): agents pick a model from a list, not free text, because models get retired (Groq retired its Llama models during M1.5) and need per-model settings. Each entry: provider, model id, display name and short description, `free` or `paid` (paid = runs on the owner's own key, M5), reasoning settings where relevant (replacing `groqReasoningOptions`: gpt-oss `low`, Qwen `none`, both hidden), and `offered` (false once retired). Each provider has a default entry. Groq entries are the models checked against the live list (`openai/gpt-oss-120b` default, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`). Ollama is the exception: its models are whatever is installed on the machine, read from Ollama's `/api/tags`. Saving an agent accepts only an offered catalog model (or an installed Ollama model).
 

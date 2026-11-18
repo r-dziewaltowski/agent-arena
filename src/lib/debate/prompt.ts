@@ -29,8 +29,11 @@ export type PromptInput = {
   summary?: string | null;
   /** Whether someone has already spoken in the current round. */
   othersSpokeThisRound: boolean;
-  /** The speaker's token cap, used to ask for a length the model can finish within. */
-  maxOutputTokens?: number;
+  /**
+   * Tokens for the visible answer (the turn length's, without a thinking model's extra room), used
+   * to ask for a length the model can finish within.
+   */
+  answerTokens?: number;
 };
 
 /** Roughly 0.6 words per token leaves room to finish a sentence before the cap. */
@@ -71,8 +74,8 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     `The other participants: ${others.map((o) => o.name).join(", ")}.`,
     [
       `Rules: speak only as ${speaker.name}, in the first person.`,
-      input.maxOutputTokens
-        ? `Keep it under ${targetWords(input.maxOutputTokens)} words, in 1 to 3 short paragraphs.`
+      input.answerTokens
+        ? `Keep it under ${targetWords(input.answerTokens)} words, in 1 to 3 short paragraphs.`
         : "Write 1 to 3 short paragraphs.",
       "Do not start with your name or a label.",
       "Never write lines for the other participants.",

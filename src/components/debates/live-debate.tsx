@@ -6,7 +6,7 @@ import { Avatar } from "@/components/avatar";
 import { Notice, cx } from "@/components/ui";
 import { costUsd, formatUsd, type Price } from "@/lib/ai/pricing";
 import { revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
-import { eventAsk, nextFetch, POLL_MS, SPREAD_MS, type Ask, type LastMoment } from "@/lib/realtime/fetch-plan";
+import { CATCH_UP, eventAsk, nextFetch, POLL_MS, SPREAD_MS, type Ask, type LastMoment } from "@/lib/realtime/fetch-plan";
 import type { CommentView } from "@/lib/chat-shared";
 import type { TurnView, UpcomingTurn } from "@/lib/debate-view";
 import type { Side } from "@/lib/debate/sides";
@@ -124,8 +124,7 @@ export function LiveDebate({
     let timer: ReturnType<typeof setTimeout>;
     let inFlight = false;
     let wokenWith: Ask | null = null;
-    let nextAsk: Ask = { personal: true };
-    let lastPersonalAt = serverTime();
+    let nextAsk: Ask = CATCH_UP;
     let lastMoment: LastMoment = null;
     const schedule = (ms: number, ask: Ask) => {
       clearTimeout(timer);
@@ -141,25 +140,24 @@ export function LiveDebate({
     const poll = async () => {
       inFlight = true;
       wokenWith = null;
-      // Polling (no stream) always asks for comments too; pushed, only the catch-up and safety fetches do.
-      const ask: Ask = pushed ? nextAsk : { personal: true };
-      let next: { delayMs: number; ask: Ask } = { delayMs: POLL_MS, ask: { personal: true } };
+      // Polling (no stream) always catches up on comments too; pushed, only the first fetch after (re)connecting does.
+      const ask: Ask = pushed ? nextAsk : CATCH_UP;
+      let next: { delayMs: number; ask: Ask } = { delayMs: POLL_MS, ask: CATCH_UP };
       const after = Math.max(0, ...turnsRef.current.filter((t) => t.status === "complete").map((t) => t.seq));
       try {
         const sentAt = Date.now();
         let query = `after=${after}`;
-        if (!ask.personal) query += `&v=${ask.version}`;
+        if (!ask.catchUp) query += `&v=${ask.version}`;
         else if (feedRef.current) query += `&commentsSince=${feedRef.current.cursor()}`;
         const res = await fetch(`/api/debates/${debateId}/turns?${query}`, { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as TurnsResponse;
           if (stopped) return;
           // A shared answer may come from the CDN, made up to a couple of seconds ago: only
-          // personal ones correct the clock and move the comments cursor.
-          if (ask.personal) {
+          // catch-up answers (never cached) correct the clock and move the comments cursor.
+          if (ask.catchUp) {
             // The server's time was read about halfway through the request.
             offsetRef.current = data.serverNow - (sentAt + Date.now()) / 2;
-            lastPersonalAt = data.serverNow;
             feedRef.current?.merge(data.comments ?? [], data.serverNow);
           }
           setTurns((prev) => {
@@ -180,7 +178,7 @@ export function LiveDebate({
           // Finished or failed, and every word shown: reload the page around the transcript (status, voting, etc.).
           if (data.status !== "running" && !data.upcoming && !data.turns.some((t) => t.status === "streaming")) router.refresh();
           if (pushed) {
-            const plan = nextFetch(data, wordsPerSecond, serverTime(), lastPersonalAt, lastMoment);
+            const plan = nextFetch(data, wordsPerSecond, serverTime(), lastMoment);
             lastMoment = plan.moment;
             next = plan;
           }
@@ -195,9 +193,9 @@ export function LiveDebate({
     };
 
     // Polling: every second. Pushed: catch up (comments included) on what happened before the
-    // stream opened, then fetch on events and at the moments already known (a turn starting or
-    // ending), shared through the CDN, plus a personal fetch every 30 s.
-    schedule(pushed ? 0 : POLL_MS, { personal: true });
+    // stream opened, then fetch on events, at the moments already known (a turn starting or
+    // ending) and every 30 s, all shared through the CDN.
+    schedule(pushed ? 0 : POLL_MS, CATCH_UP);
     return () => {
       stopped = true;
       clearTimeout(timer);

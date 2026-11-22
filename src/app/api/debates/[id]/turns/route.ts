@@ -2,7 +2,6 @@ import { and, asc, eq, gt, isNotNull, or } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db/client";
 import { debateParticipants, debates, turns } from "@/lib/db/schema";
-import { getCurrentUser } from "@/lib/auth/session";
 import { commentsSince, commentViews } from "@/lib/chat";
 import { viewTurns } from "@/lib/debate-view";
 import { readingWordsPerSecond } from "@/lib/debate/pacing";
@@ -15,10 +14,10 @@ import { turnsCacheControl } from "@/lib/realtime/fetch-plan";
  * Turns are cut to the words viewers should have reached by now (see pacing.ts); a turn being shown
  * comes whole too, with its timing and speech, so the browser can reveal it smoothly (in step with
  * the audio when listening). `serverNow` lets the browser correct for its clock being off.
- * With `commentsSince` (the previous personal fetch's `serverNow`), it also returns the chat comments
- * posted, deleted or removed since then, marked with the viewer's own: a personal answer, never
- * cached. Without it but with a version `v` (realtime/fetch-plan.ts), the answer is the same for
- * everyone, so the CDN shares it for a couple of seconds.
+ * With `commentsSince` (the browser's comments cursor), it also returns the chat comments posted,
+ * deleted or removed since then: the catch-up for gaps in pushed comments, never cached, since
+ * each browser's cursor differs. Without it but with a version `v` (realtime/fetch-plan.ts), the
+ * CDN shares the answer for a couple of seconds. Nothing in any answer depends on who's asking.
  */
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/[id]/turns">) {
   const { id } = await ctx.params;
@@ -44,9 +43,10 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/debates/
 
   const wordsPerSecond = readingWordsPerSecond();
   const { turns: visible, upcoming } = viewTurns(rows, now, wordsPerSecond);
-  // New comments are rare next to polls: the viewer is looked up only when there are some.
+  // As a visitor sees them: the browser already knows which are the viewer's own (from the page,
+  // and from posting), so this endpoint never needs to know who's asking.
   const newComments = since > 0 ? await commentsSince(db, id, since) : [];
-  const comments = newComments.length ? await commentViews(db, id, newComments, (await getCurrentUser())?.id ?? null) : [];
+  const comments = newComments.length ? await commentViews(db, id, newComments, null) : [];
   return Response.json(
     {
       status: debate.status,

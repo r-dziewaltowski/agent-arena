@@ -262,7 +262,7 @@ async function Lobby({
 
   return (
     <div className="space-y-6">
-      <AutoRefresh />
+      <AutoRefresh debateId={debate.id} />
       {startInfo && <Notice tone="blue">{startInfo}</Notice>}
       {sides && (
         <Notice>

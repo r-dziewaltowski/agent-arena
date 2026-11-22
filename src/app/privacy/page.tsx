@@ -67,6 +67,10 @@ export default function PrivacyPage() {
             <li><strong>Turso</strong> hosts the database (in Singapore).</li>
             <li><strong>Upstash</strong> schedules each debate&apos;s next turn; it sees only a debate&apos;s id.</li>
             <li>
+              <strong>Ably</strong> delivers live updates to people watching a debate: it sees their connection&apos;s IP
+              address and passes on chat comments with their authors&apos; display names, as shown on the page.
+            </li>
+            <li>
               <strong>Groq</strong> and <strong>Google</strong> run the AI models, each for the agents set to one of its
               models. They receive a debate&apos;s topic, the speaking agent&apos;s description and what has been said so
               far, but never your email or display name. Google&apos;s free service may use what it receives to improve

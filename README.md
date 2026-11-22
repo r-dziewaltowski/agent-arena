@@ -15,12 +15,27 @@ A portfolio project built with Next.js 16, the Vercel AI SDK and local models th
 | Data | SQLite via Drizzle ORM and `@libsql/client` (file locally, Turso in production) |
 | Auth | Better Auth (email and password, GitHub OAuth) |
 | Hosting (M4) | Vercel + Turso + Upstash QStash, all on free tiers |
+| Live updates | Pushed through Ably (free tier) as Server-Sent Events; polling as the fallback |
 
 ## How a debate runs
 
-A debate is a persisted state machine, not a long-running process. Each step (`runStep`) generates exactly one agent turn, writes the text to the database as the model streams it, saves the turn and advances the pointer. Debates run whether or not anyone is watching: viewers only poll for new text and never trigger a model call. Because every step is saved, a debate resumes after a restart.
+A debate is a persisted state machine, not a long-running process. Each step (`runStep`) generates exactly one agent turn, writes the text to the database as the model streams it, saves the turn and advances the pointer. Debates run whether or not anyone is watching: viewers only receive updates and never trigger a model call. Because every step is saved, a debate resumes after a restart.
 
 A queue (Upstash QStash) drives the steps. Each queued message makes QStash call the app's `/api/jobs/advance` route, which runs one step and queues the next message: right away, or after a delay while the model is rate-limited or unreachable. Starting a debate queues its first message, and a scheduled debate gets a delayed message for its start time. A sweep every few minutes restarts any debate whose chain of messages was lost. The job routes accept only calls signed by the queue. There is no always-on process, so the app runs on serverless hosting. Locally, `npm run dev` runs QStash's dev server in Docker, so turns are triggered the same way as in production. See [docs/plan.md](docs/plan.md).
+
+## Live updates
+
+Viewers don't ask the server for news every second: the server tells them when something changes. Each debate has one event channel. Saving a turn, a change of state (waiting for the model, failed, finished), a lobby entry or the start, and every chat comment publish an event to it (`src/lib/realtime`). The browser holds one Server-Sent Events connection (`EventSource`) and reacts: a comment is merged in as it is; a lobby change reloads the page once; a turn event makes the transcript fetch the turns endpoint, which still releases a turn only once it starts, so nobody can read ahead. Between events the browser fetches only at moments it already knows (a turn starting or ending), plus a safety check every 30 s.
+
+Vercel functions shouldn't hold connections open, so in production the connections go to **Ably**: the server publishes with one HTTP call, and each browser gets an address with a short-lived token that can only listen to that debate. Locally and in the end-to-end tests, the app's own route (`/api/debates/[id]/events`) stands in, since one long-running server handles every request there. Whenever the stream is down (no key, Ably's limits reached, a dropped network), the page falls back to polling: every second for the transcript, every 4 s in a lobby. Nothing else changes.
+
+What it saves, per viewer (measured locally, 2026-11-22, a 2-round debate with voices):
+
+| | Polling (before) | Pushed |
+|---|---|---|
+| Watching the whole debate (about 3½ minutes on the page) | ~200 requests | 13 |
+| A lobby | a full page render every 4 s | one per change |
+| Someone entering, as seen by another viewer | up to 4 s | 0.3 s |
 
 ## Scaling
 
@@ -31,7 +46,7 @@ The limits, in the order they would be hit, and the path past each:
 1. **Model rate limits.** The free tier caps requests per minute and per day, shared by all users. Flow control keeps within the per-minute limit; heavier use moves to paid models on users' own keys.
 2. **The queue's free tier.** About 1,000 messages a day (one per turn, plus the sweep), roughly 40-50 debates. Past that, QStash's pay-as-you-go plan, or another queue behind the `queue.ts` seam.
 3. **The database.** SQLite (Turso in production) has a single writer. The next step is PostgreSQL (supported by Drizzle).
-4. **Live streaming.** Partial turn text is written to the database several times a second and viewers poll for it. At scale, chunks go through pub/sub (the `broadcast.ts` seam: Ably, Pusher or Redis) and only finished turns are stored, removing most writes and all polling.
+4. **Live updates.** Viewers get pushed events through Ably (see Live updates), so watching costs a few requests per turn, not one a second. Ably's free tier allows 200 connections at once and 6 million messages a month (each delivery to each viewer counts); past that, pages poll again until a paid plan. Partial turn text is still written to the database a few times a second while a model writes; viewers never see it, so those writes can go.
 5. **Serverless plan limits.** Function duration and the free plan's non-commercial terms. A paid plan, or the same app on a container host; nothing in the code depends on Vercel.
 
 The project never pays for model calls: free debates run on a free tier (with shared rate limits), and paid models run only on users' own API keys, so each owner pays for their own agents.
@@ -111,6 +126,12 @@ GMAIL_APP_PASSWORD=
 USER_API_KEYS_ENCRYPTION_SECRET=
 # Optional. Another OpenRouter address (the end-to-end tests use a fake one).
 # OPENROUTER_URL=
+
+# Optional. Live updates through Ably ("appId.keyId:secret", a key that can publish and subscribe).
+# Without it, the app's own event stream serves them locally, and Vercel deployments poll.
+# ABLY_API_KEY=
+# Optional. "off" turns pushed updates off: pages poll.
+# REALTIME=
 ```
 
 Generate the secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`, and `USER_API_KEYS_ENCRYPTION_SECRET` with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` (a different value per environment; changing it later disconnects everyone's OpenRouter account). In development Better Auth falls back to a built-in secret with a warning; production builds refuse to start without one.
@@ -145,7 +166,8 @@ Production runs on Vercel's Hobby plan, with the database on Turso and the queue
 4. **Email:** create a Gmail account just for the app (e.g. agentarena.mail@gmail.com), turn on 2-Step Verification for it, then create an app password at https://myaccount.google.com/apppasswords. Add `GMAIL_USER` (the address) and `GMAIL_APP_PASSWORD` (the 16 letters, without spaces) to Vercel for **Production**. Production deploys fail without them, since nobody could confirm their email. Gmail allows about 500 emails a day; with a domain later, a provider such as Resend can replace it in `src/lib/email/send.ts`.
 5. **Paid models:** add a new `USER_API_KEYS_ENCRYPTION_SECRET` (generated as above, not the local one) for **Production**. Production deploys fail without it. Nothing else is needed: each user connects their own OpenRouter account from their Account page, and their agents' paid turns are billed to them.
 6. **Google sign-in (optional):** add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to Vercel (the same client as locally, with the production redirect URI added) and redeploy.
-7. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
+7. **Live updates (optional):** create a free Ably account and an app, then an API key with the *Publish* and *Subscribe* capabilities. Add it as `ABLY_API_KEY` for **Production** (and Preview if you like) and redeploy. Check it from your machine first with `ABLY_API_KEY=… npm run realtime:check` (or the key in `.env.local`). New Ably apps may require identified clients; the app identifies itself (the server as `agent-arena-server`, viewers under one shared identity), so no rule needs changing. Without it, production polls, as before.
+8. **GitHub sign-in (optional):** create a second OAuth app with the production address as homepage and `https://<production address>/api/auth/callback/github` as callback, add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to Vercel, and redeploy.
 
 Each deploy runs `npm run vercel-build`: it applies pending migrations to that environment's database, creates or updates the sweep schedule (production only), then builds. The production address comes from Vercel (`VERCEL_PROJECT_PRODUCTION_URL`); set `BETTER_AUTH_URL` and `APP_URL` only for a custom domain. Pushing to `main` deploys production; other branches get preview deployments.
 
@@ -161,6 +183,7 @@ Each deploy runs `npm run vercel-build`: it applies pending migrations to that e
 | `npm run queue:setup` | Creates the sweep schedule on a deployment (`APP_URL=https://… npm run queue:setup`) |
 | `npm test` | Unit tests (Vitest); they use a fake model, so Ollama isn't needed |
 | `npm run test:e2e` | End-to-end tests (Playwright): a real browser against a production build on port 3100, with a scripted fake model, a throwaway database and the QStash dev server (started in Docker if `npm run dev` isn't running). Locally they use your installed Chrome |
+| `npm run realtime:check` | Checks `ABLY_API_KEY`: gets a listen-only token, opens the event stream, publishes one event and waits for it |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript checks |
 | `npm run db:generate` | Creates a migration after a schema change |
 | `npm run db:migrate` | Applies pending migrations |

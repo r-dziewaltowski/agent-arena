@@ -10,6 +10,7 @@ import { COMMENT_GAP_MS, COMMENT_MAX_LENGTH, COMMENTS_PER_DEBATE, cleanComment, 
 import type { Db } from "./db/client";
 import { debateComments, debateParticipants, debates, turns, user } from "./db/schema";
 import { turnRevealEndsAt } from "./debate/pacing";
+import { publish } from "./realtime/publish";
 
 export { COMMENT_GAP_MS, COMMENT_MAX_LENGTH, COMMENTS_PER_DEBATE, type CommentView } from "./chat-shared";
 
@@ -98,25 +99,27 @@ export async function createComment(
     throw new ChatError("TOO_FAST", `Wait ${wait} second${wait === 1 ? "" : "s"} before your next comment.`);
   }
 
-  const id = randomUUID();
-  await db.insert(debateComments).values({
-    id,
-    debateId: input.debateId,
-    userId: input.userId,
-    body,
-    createdAt: now,
-  });
-  return id;
+  const row = { id: randomUUID(), debateId: input.debateId, userId: input.userId, body, createdAt: now, deletedAt: null, deletedBy: null };
+  await db.insert(debateComments).values(row);
+  await publishComment(db, row);
+  return row.id;
 }
 
-/** Its author deletes a comment: viewers drop it on their next poll. Returns whether it was theirs. */
+/** Its author deletes a comment: viewers drop it (pushed, or on their next fetch). Returns whether it was theirs. */
 export async function deleteOwnComment(db: Db, commentId: string, userId: string, now: number): Promise<boolean> {
   const done = await db
     .update(debateComments)
     .set({ body: "", deletedAt: now, deletedBy: "author" })
     .where(and(eq(debateComments.id, commentId), eq(debateComments.userId, userId), isNull(debateComments.deletedAt)))
-    .returning({ id: debateComments.id });
+    .returning();
+  if (done[0]) await publishComment(db, done[0]);
   return done.length > 0;
+}
+
+/** Pushes a comment to everyone watching, as a visitor sees it (each browser knows its own). */
+export async function publishComment(db: Db, row: CommentRow): Promise<void> {
+  const [comment] = await commentViews(db, row.debateId, [row], null);
+  if (comment) await publish(row.debateId, { type: "comment", comment });
 }
 
 type CommentRow = typeof debateComments.$inferSelect;

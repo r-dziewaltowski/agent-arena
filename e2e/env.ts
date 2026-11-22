@@ -40,6 +40,9 @@ export const e2eEnv: Record<string, string> = {
   GOOGLE_CLIENT_ID: "",
   GOOGLE_CLIENT_SECRET: "",
   // No real email: everything goes to the outbox file, where the tests read the links.
+  // Live updates through the app's own event stream, never Ably, even if .env.local has a key.
+  ABLY_API_KEY: "",
+  REALTIME: "",
   GMAIL_USER: "",
   GMAIL_APP_PASSWORD: "",
   EMAIL_OUTBOX_FILE,

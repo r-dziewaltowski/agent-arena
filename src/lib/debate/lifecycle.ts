@@ -9,6 +9,7 @@ import { disambiguateNames } from "./prompt";
 import { allowedSides, alternateSides, bothSidesTaken, emptySides, SIDE_LABELS, type Side } from "./sides";
 import { TONE_DESCRIPTIONS, type Creativity, type TurnLength } from "./traits";
 import { speechDirection, voiceFor } from "../voice/voices";
+import { publish, publishEach } from "../realtime/publish";
 
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type DbOrTx = Db | Tx;
@@ -119,7 +120,7 @@ export async function enter(
   now = Date.now(),
   availability?: ModelAvailability,
 ): Promise<string> {
-  return db.transaction(async (tx) => {
+  const id = await db.transaction(async (tx) => {
     const debate = await loadDebate(tx, args.debateId);
     if (debate.status !== "open") throw new LifecycleError("NOT_OPEN", "This debate is no longer open.");
     if (!Number.isInteger(args.position) || args.position < 1 || args.position > debate.maxParticipants) {
@@ -180,11 +181,13 @@ export async function enter(
     }
     return id;
   });
+  await publish(args.debateId, { type: "refresh" });
+  return id;
 }
 
 /** Withdraws one of the user's entries from an open debate, freeing the slot. */
 export async function withdraw(db: Db, args: { participantId: string; userId: string }): Promise<void> {
-  await db.transaction(async (tx) => {
+  const debateId = await db.transaction(async (tx) => {
     const [entry] = await tx
       .select()
       .from(debateParticipants)
@@ -196,7 +199,9 @@ export async function withdraw(db: Db, args: { participantId: string; userId: st
       throw new LifecycleError("NOT_OPEN", "You can't withdraw after the debate has started.");
     }
     await tx.delete(debateParticipants).where(eq(debateParticipants.id, args.participantId));
+    return entry.debateId;
   });
+  await publish(debateId, { type: "refresh" });
 }
 
 /** The creator's Start button for a manual debate. */
@@ -216,6 +221,7 @@ export async function startDebate(
     }
     await startInTx(tx, args.debateId, now, availability);
   });
+  await publish(args.debateId, { type: "refresh" });
 }
 
 /**
@@ -347,7 +353,7 @@ export async function startOrCancelScheduled(
   now = Date.now(),
   availability?: ModelAvailability,
 ): Promise<"started" | "cancelled" | "unchanged"> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<"started" | "cancelled" | "unchanged"> => {
     const [debate] = await tx.select().from(debates).where(eq(debates.id, debateId));
     if (
       !debate ||
@@ -375,6 +381,8 @@ export async function startOrCancelScheduled(
       .returning({ id: debates.id });
     return rows.length ? "cancelled" : "unchanged";
   });
+  if (result !== "unchanged") await publish(debateId, { type: "refresh" });
+  return result;
 }
 
 /**
@@ -411,6 +419,7 @@ export async function resumeDebate(
         .where(eq(debateParticipants.id, p.id));
     }
   });
+  await publish(args.debateId, { type: "refresh" });
 }
 
 /** Creators may delete their debate while it is open; admins may delete any debate at any time. */
@@ -434,6 +443,7 @@ export async function deleteDebate(
     await tx.delete(debateParticipants).where(eq(debateParticipants.debateId, args.debateId));
     await tx.delete(debates).where(eq(debates.id, args.debateId));
   });
+  await publish(args.debateId, { type: "refresh" });
 }
 
 /**
@@ -444,7 +454,7 @@ export async function deleteAgent(
   db: Db,
   args: { agentId: string; userId: string; isAdmin: boolean },
 ): Promise<void> {
-  await db.transaction(async (tx) => {
+  const withdrawnFrom = await db.transaction(async (tx) => {
     const [agent] = await tx.select().from(agents).where(eq(agents.id, args.agentId));
     if (!agent) throw new LifecycleError("NOT_FOUND", "Agent not found.");
     if (!args.isAdmin && agent.ownerId !== args.userId) {
@@ -454,19 +464,20 @@ export async function deleteAgent(
     const openDebateIds = (
       await tx.select({ id: debates.id }).from(debates).where(eq(debates.status, "open"))
     ).map((d) => d.id);
-    if (openDebateIds.length) {
-      await tx
-        .delete(debateParticipants)
-        .where(
-          and(eq(debateParticipants.agentId, args.agentId), inArray(debateParticipants.debateId, openDebateIds)),
-        );
-    }
+    const withdrawn = openDebateIds.length
+      ? await tx
+          .delete(debateParticipants)
+          .where(and(eq(debateParticipants.agentId, args.agentId), inArray(debateParticipants.debateId, openDebateIds)))
+          .returning({ debateId: debateParticipants.debateId })
+      : [];
     await tx
       .update(debateParticipants)
       .set({ agentId: null })
       .where(eq(debateParticipants.agentId, args.agentId));
     await tx.delete(agents).where(eq(agents.id, args.agentId));
+    return withdrawn.map((w) => w.debateId);
   });
+  await publishEach(withdrawnFrom, { type: "refresh" });
 }
 
 /**

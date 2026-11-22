@@ -16,7 +16,6 @@ import { deleteHeardAudio } from "../voice/cleanup";
 import { defaultSpeechMaker, type Speech, type SpeechMaker } from "../voice/speech";
 import { voiceFor } from "../voice/voices";
 import { TURN_LENGTHS, type Creativity, type TurnLength } from "./traits";
-import { publishChunk } from "./broadcast";
 import { votingClosesAtFor } from "./lifecycle";
 import { buildPrompt, cleanTurnText, trimToLastSentence, turnKindFor, type Speaker } from "./prompt";
 import { nextPrepareAt, PAUSE_BETWEEN_TURNS_MS, readingWordsPerSecond, revealDurationMs, turnRevealEndsAt } from "./pacing";
@@ -255,7 +254,6 @@ export async function runStep(db: Db, debateId: string, opts: StepOptions = {}):
       for await (const delta of result.textStream) {
         text += delta;
         opts.onDelta?.(delta);
-        publishChunk(debateId, delta);
         if (now() - lastWrite >= interval) {
           await db.update(turns).set({ content: text, updatedAt: now() }).where(eq(turns.id, turnId));
           lastWrite = now();

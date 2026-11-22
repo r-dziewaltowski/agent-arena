@@ -9,6 +9,7 @@ import { debates } from "../db/schema";
 import { runStep, type StepOptions, type StepOutcome } from "../debate/engine";
 import { startOrCancelScheduled } from "../debate/lifecycle";
 import type { JobQueue } from "./queue";
+import { publish } from "../realtime/publish";
 
 export type JobDeps = StepOptions & {
   queue: JobQueue;
@@ -37,6 +38,7 @@ export async function markQueueDelayed(db: Db, debateId: string): Promise<void> 
     .update(debates)
     .set({ waitingReason: QUEUE_DELAYED })
     .where(and(eq(debates.id, debateId), eq(debates.status, "running")));
+  await publish(debateId, { type: "turns" });
 }
 
 /** Queues a step; if the queue refuses, marks the debate as delayed and rethrows. */
@@ -76,6 +78,9 @@ export async function advanceDebate(db: Db, debateId: string, deps: JobDeps): Pr
   if (debate.status !== "running") return { kind: "idle", status: debate.status };
 
   const outcome = await runStep(db, debateId, deps);
+  // Viewers fetch what changed: a new turn (they get it when it starts), or the debate waiting,
+  // failing or finishing. `skipped` changed nothing.
+  if (outcome.kind !== "skipped") await publish(debateId, { type: "turns" });
   const requeuedFor = await chain(db, debateId, outcome, deps);
   return { kind: "step", outcome, requeuedFor };
 }

@@ -16,6 +16,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed-dev": "tsx scripts/seed-dev-accounts.ts",
     "email:check": "tsx scripts/check-email.ts",
+    "realtime:check": "tsx scripts/check-realtime.ts",
     "models:google": "tsx scripts/probe-google-models.ts",
     "models:openrouter": "tsx scripts/probe-openrouter-models.ts",
     "voices:previews": "tsx scripts/make-voice-previews.ts",

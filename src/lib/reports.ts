@@ -5,6 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { and, count, eq, gt, inArray, type SQL } from "drizzle-orm";
+import { publishComment } from "./chat";
 import type { Db } from "./db/client";
 import { agentImages, agents, debateComments, debateParticipants, debates, reports, turnAudio, turns } from "./db/schema";
 import { isUniqueViolation } from "./debate/lifecycle";
@@ -126,7 +127,12 @@ export async function removeTurnText(db: Db, turnId: string, adminId: string, no
 
 /** Removes a chat comment (it shows as removed by an admin) and closes the reports about it. */
 export async function removeComment(db: Db, commentId: string, adminId: string, now: number): Promise<void> {
-  await db.update(debateComments).set({ body: "", deletedAt: now, deletedBy: "admin" }).where(eq(debateComments.id, commentId));
+  const [removed] = await db
+    .update(debateComments)
+    .set({ body: "", deletedAt: now, deletedBy: "admin" })
+    .where(eq(debateComments.id, commentId))
+    .returning();
+  if (removed) await publishComment(db, removed);
   await resolveMatching(db, eq(reports.commentId, commentId), { adminId, now, resolution: "Removed the comment" });
 }
 

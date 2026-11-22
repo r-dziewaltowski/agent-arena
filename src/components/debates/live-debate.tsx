@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { Avatar } from "@/components/avatar";
 import { Notice, cx } from "@/components/ui";
 import { costUsd, formatUsd, type Price } from "@/lib/ai/pricing";
-import { revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
+import { revealDurationMs, revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
 import type { CommentView } from "@/lib/chat-shared";
 import type { TurnView, UpcomingTurn } from "@/lib/debate-view";
 import type { Side } from "@/lib/debate/sides";
@@ -13,6 +13,7 @@ import { charsAt } from "@/lib/voice/marks";
 import { useChatFeed } from "./chat";
 import { Countdown } from "./countdown";
 import { SideBadge } from "./side-badge";
+import { useDebateEvents } from "./use-debate-events";
 
 /** `price`: set for agents on paid models, billed to their owner's OpenRouter account. */
 type Speaker = { participantId: string; name: string; position: number; price: Price | null; avatarUrl: string; side: Side | null };
@@ -46,6 +47,28 @@ const NAME_COLORS = ["text-indigo-700 dark:text-indigo-300", "text-emerald-700 d
 const LISTEN_KEY = "agent-arena:listen";
 /** How often a turn being shown is redrawn. */
 const TICK_MS = 50;
+/** Without pushed events: how often the turns are fetched. */
+const POLL_MS = 1_000;
+/** With pushed events: a fetch at least this often anyway, in case one was missed. */
+const SAFETY_FETCH_MS = 30_000;
+/** Viewers woken by the same event fetch at random within this window, not all in one instant. */
+const SPREAD_MS = 800;
+
+/**
+ * With pushed events, when to fetch next: just after the next known moment (the upcoming turn
+ * starts, or the one being shown ends; at the last one's end the page reloads), else the safety
+ * fetch. A turn written live without pacing (the terminal CLI's setting) keeps polling.
+ */
+function nextFetchIn(data: TurnsResponse, wordsPerSecond: number | null): number {
+  if (data.turns.some((t) => t.status === "streaming" && !t.reveal)) return POLL_MS;
+  const moments = data.turns.flatMap((t) =>
+    t.reveal ? [t.reveal.startsAt + revealDurationMs(t.reveal.full, wordsPerSecond ?? 4.5, t.reveal.marks)] : [],
+  );
+  if (data.upcoming) moments.push(data.upcoming.startsAt);
+  const soonest = Math.min(...moments) - data.serverNow;
+  if (!Number.isFinite(soonest)) return SAFETY_FETCH_MS;
+  return Math.min(SAFETY_FETCH_MS, Math.max(250, soonest + 100 + Math.random() * 500));
+}
 
 function roundTitle(round: number, rounds: number) {
   if (round === 1) return "Opening statements";
@@ -54,10 +77,12 @@ function roundTitle(round: number, rounds: number) {
 }
 
 /**
- * The transcript. While the debate runs it polls the turns endpoint about once a second (bringing
- * the chat's new comments too, when the page has a chat). A turn
- * being shown arrives whole, with its timing: this view reveals it word by word on the server's
- * clock, or, when listening, in step with the turn's speech (lib/debate/pacing.ts, lib/voice/marks.ts).
+ * The transcript. While the debate is live it listens to the debate's pushed events (lib/realtime)
+ * and fetches the turns endpoint when told to, or when a turn is due to start or end; while the
+ * stream is down it polls the endpoint every second instead. The chat's comments arrive pushed, or
+ * with each fetch. A turn being shown arrives whole, with its timing: this view reveals it word by
+ * word on the server's clock, or, when listening, in step with the turn's speech
+ * (lib/debate/pacing.ts, lib/voice/marks.ts).
  */
 export function LiveDebate({
   debateId,
@@ -106,12 +131,34 @@ export function LiveDebate({
   const showing = turns.some((t) => t.status === "streaming") || upcoming !== null;
   const active = state.status === "running" || showing;
 
+  // Pushed events: comments arrive whole; anything else means "fetch the turns".
+  const wakeRef = useRef<((spreadMs: number) => void) | null>(null);
+  const pushed = useDebateEvents(debateId, active, (event) => {
+    if (event.type === "comment") feedRef.current?.merge([event.comment]);
+    else if (event.type === "refresh") router.refresh();
+    else if (event.type === "turns") wakeRef.current?.(SPREAD_MS);
+  });
+
   useEffect(() => {
     if (!active) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
+    let inFlight = false;
+    let wokenMeanwhile = false;
+    const schedule = (ms: number) => {
+      clearTimeout(timer);
+      if (!stopped) timer = setTimeout(poll, ms);
+    };
+    // An event during a fetch may not be in its answer: fetch again once it's back.
+    wakeRef.current = (spreadMs) => {
+      if (inFlight) wokenMeanwhile = true;
+      else schedule(Math.random() * spreadMs);
+    };
 
     const poll = async () => {
+      inFlight = true;
+      wokenMeanwhile = false;
+      let next = POLL_MS;
       const after = Math.max(0, ...turnsRef.current.filter((t) => t.status === "complete").map((t) => t.seq));
       try {
         const sentAt = Date.now();
@@ -140,19 +187,24 @@ export function LiveDebate({
           });
           // Finished or failed, and every word shown: reload the page around the transcript (status, voting, etc.).
           if (data.status !== "running" && !data.upcoming && !data.turns.some((t) => t.status === "streaming")) router.refresh();
+          if (pushed) next = nextFetchIn(data, wordsPerSecond);
         }
       } catch {
         // Network hiccup: try again on the next tick.
       }
-      if (!stopped) timer = setTimeout(poll, 1000);
+      inFlight = false;
+      schedule(wokenMeanwhile ? Math.random() * SPREAD_MS : next);
     };
 
-    timer = setTimeout(poll, 1000);
+    // Polling: every second. Pushed: catch up on what happened before the stream opened, then
+    // fetch only on events and at the moments already known (a turn starting or ending).
+    schedule(pushed ? 0 : POLL_MS);
     return () => {
       stopped = true;
       clearTimeout(timer);
+      wakeRef.current = null;
     };
-  }, [debateId, active, router]);
+  }, [debateId, active, router, pushed, wordsPerSecond]);
 
   // Redraw turns being shown a few times a second.
   const [now, setNow] = useState(() => serverNow);

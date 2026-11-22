@@ -25,7 +25,7 @@ Environment (current machine, 2026-11-15): Node 26.13.1, npm 11.20, git 2.56, Ol
 
 ## How we work
 
-- Process: the app-builder skill (personal Claude Code skill), technical profile. The owner decides fundamental and budget-dependent choices; minor ones are decided and announced.
+- Process: the app-builder skill (personal Claude Code skill, published 2026-11-22 at https://github.com/r-dziewaltowski/app-builder; install with `/plugin marketplace add r-dziewaltowski/app-builder` then `/plugin install app-builder@app-builder`), technical profile. The owner decides fundamental and budget-dependent choices; minor ones are decided and announced.
 - Stack notes (the skill's `stacks/`, read each session): nextjs, vercel, turso-libsql, better-auth, google-oauth, upstash-qstash, ai-providers, gmail-smtp, playwright, github, windows.
 - Budget: $0 a month. The project never pays for model calls; nothing may bill a card.
 - Commits and pushes only when the owner says so; pushing to `main` deploys production.

@@ -101,6 +101,16 @@ describe("createComment", () => {
     await expectError(post("carol"), "TOO_MANY");
   });
 
+  it("is refused when the debate's creator turned the chat off; it's on by default", async () => {
+    const [on] = await db.select({ chatEnabled: debates.chatEnabled }).from(debates).where(eq(debates.id, debateId));
+    expect(on.chatEnabled).toBe(true);
+    const quiet = await createDebate(db, "dan", { topic: "Tea or coffee?", rounds: 2, maxParticipants: 2, startMode: "manual", chatEnabled: false }, clock.now());
+    await enter(db, { debateId: quiet, userId: "dan", agentId: await seedAgent(db, "dan", { name: "Tea" }), position: 1 });
+    await enter(db, { debateId: quiet, userId: "carol", agentId: await seedAgent(db, "carol", { name: "Coffee" }), position: 2 });
+    await startDebate(db, { debateId: quiet, userId: "dan" }, clock.now());
+    await expect(post("alice", "Hi", quiet)).rejects.toThrow("This debate has no chat.");
+  });
+
   it("is closed in the lobby, once viewers have seen the last turn, and for a missing debate", async () => {
     const lobby = await createDebate(db, "dan", { topic: "Tea or coffee?", rounds: 2, maxParticipants: 2, startMode: "manual" }, clock.now());
     await expectError(post("carol", "Hi", lobby), "CLOSED");

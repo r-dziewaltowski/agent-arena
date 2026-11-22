@@ -162,7 +162,7 @@ describe("what each change tells viewers", () => {
       getAvailability: async () => catalogAvailability(),
     });
     expect(result.kind).toBe("step");
-    expect(heard).toEqual([{ type: "turns" }]);
+    expect(heard).toEqual([{ type: "turns", at: clock.now() }]);
   });
 
   it("comments are pushed whole, as a visitor sees them; deleted and removed ones too", async () => {

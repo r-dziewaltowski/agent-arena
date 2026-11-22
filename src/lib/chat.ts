@@ -67,8 +67,12 @@ export async function createComment(
   if (!body) throw new ChatError("EMPTY", "Write something first.");
   if (body.length > COMMENT_MAX_LENGTH) throw new ChatError("TOO_LONG", `Keep it under ${COMMENT_MAX_LENGTH} characters.`);
 
-  const [debate] = await db.select({ status: debates.status }).from(debates).where(eq(debates.id, input.debateId));
+  const [debate] = await db
+    .select({ status: debates.status, chatEnabled: debates.chatEnabled })
+    .from(debates)
+    .where(eq(debates.id, input.debateId));
   if (!debate) throw new ChatError("NOT_FOUND", "That debate no longer exists.");
+  if (!debate.chatEnabled) throw new ChatError("CLOSED", "This debate has no chat.");
   const timing = await db
     .select({
       kind: turns.kind,

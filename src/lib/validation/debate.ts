@@ -26,6 +26,7 @@ export const createDebateSchema = z
     startMode: z.enum(["manual", "when_full", "scheduled"], { error: "Pick how the debate starts." }),
     startAt: z.number().int().positive().optional(),
     allowMultipleEntries: z.boolean().default(false),
+    chatEnabled: z.boolean().default(true),
     votingDuration: z.enum(["1h", "1d", "3d", "1w"], { error: "Pick how long voting stays open." }).default("3d"),
     tallyVisibility: z
       .enum(["live", "after_vote", "after_close"], { error: "Pick when vote counts are shown." })

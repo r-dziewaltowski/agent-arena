@@ -38,7 +38,7 @@ export async function markQueueDelayed(db: Db, debateId: string): Promise<void> 
     .update(debates)
     .set({ waitingReason: QUEUE_DELAYED })
     .where(and(eq(debates.id, debateId), eq(debates.status, "running")));
-  await publish(debateId, { type: "turns" });
+  await publish(debateId, { type: "turns", at: Date.now() });
 }
 
 /** Queues a step; if the queue refuses, marks the debate as delayed and rethrows. */
@@ -80,7 +80,7 @@ export async function advanceDebate(db: Db, debateId: string, deps: JobDeps): Pr
   const outcome = await runStep(db, debateId, deps);
   // Viewers fetch what changed: a new turn (they get it when it starts), or the debate waiting,
   // failing or finishing. `skipped` changed nothing.
-  if (outcome.kind !== "skipped") await publish(debateId, { type: "turns" });
+  if (outcome.kind !== "skipped") await publish(debateId, { type: "turns", at: now() });
   const requeuedFor = await chain(db, debateId, outcome, deps);
   return { kind: "step", outcome, requeuedFor };
 }

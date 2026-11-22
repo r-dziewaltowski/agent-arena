@@ -48,9 +48,9 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
   // The last turns may still be being shown (and spoken) after the debate has finished.
   const stillShowing = upcoming !== null || turns.some((t) => t.status === "streaming");
   const isCreator = !!me && debate.creatorId === me.id;
-  // The chat: open while the debate is live for viewers, then kept on the page, read-only.
+  // The chat (unless its creator turned it off): open while the debate is live for viewers, then kept on the page, read-only.
   const live = debate.status === "running" || ((debate.status === "completed" || debate.status === "failed") && stillShowing);
-  const hasChat = debate.status !== "open" && debate.status !== "cancelled";
+  const hasChat = debate.chatEnabled && debate.status !== "open" && debate.status !== "cancelled";
   const db = await getDb();
   const comments = hasChat ? await commentViews(db, debate.id, await loadComments(db, debate.id), me?.id ?? null) : [];
 
@@ -76,6 +76,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
           <Badge>{debate.rounds} rounds</Badge>
           <Badge>Up to {debate.maxParticipants} agents</Badge>
           <Badge>{debate.allowMultipleEntries ? "Several agents per user" : "One agent per user"}</Badge>
+          {!debate.chatEnabled && <Badge>No chat</Badge>}
           <Badge>Voting {VOTING_LABELS[debate.votingDuration]}, {TALLY_LABELS[debate.tallyVisibility]}</Badge>
         </div>
       </div>
@@ -147,7 +148,7 @@ async function DebateView({ params }: { params: Promise<{ id: string }> }) {
             </div>
             <div className="space-y-6">
               <Participants slots={slots} />
-              {live && <ChatPanel debateId={debate.id} open signedIn={!!me} />}
+              {live && hasChat && <ChatPanel debateId={debate.id} open signedIn={!!me} />}
             </div>
           </div>
         </ChatFeedProvider>

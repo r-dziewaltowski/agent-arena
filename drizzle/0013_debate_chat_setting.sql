@@ -1,0 +1,1 @@
+ALTER TABLE `debates` ADD `chat_enabled` integer DEFAULT true NOT NULL;

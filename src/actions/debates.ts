@@ -43,6 +43,7 @@ const DEBATE_FIELDS = [
   "startMode",
   "startAtLocal",
   "allowMultipleEntries",
+  "chatEnabled",
   "votingDuration",
   "tallyVisibility",
 ] as const;
@@ -66,6 +67,7 @@ export async function createDebateAction(_prev: FormState, formData: FormData): 
       startMode: startMode as "manual" | "when_full" | "scheduled",
       startAt,
       allowMultipleEntries: formData.get("allowMultipleEntries") === "on",
+      chatEnabled: formData.get("chatEnabled") === "on",
       votingDuration: String(formData.get("votingDuration")) as "1h" | "1d" | "3d" | "1w",
       tallyVisibility: String(formData.get("tallyVisibility")) as "live" | "after_vote" | "after_close",
     });

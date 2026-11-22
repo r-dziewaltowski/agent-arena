@@ -77,13 +77,43 @@ test("a lobby updates the moment someone enters, without reloading every few sec
   await expect(lev.getByText("Kim's Agent", { exact: true })).toBeVisible({ timeout: 2_000 });
 });
 
-test("with the stream blocked, the page polls and the debate still plays to the end", async () => {
+/** The turns fetches a page makes, with how each answer may be cached. */
+function recordTurnsFetches(page: Page) {
+  const fetches: { url: URL; cacheControl: string }[] = [];
+  page.on("response", (res) => {
+    const url = new URL(res.url());
+    if (/\/api\/debates\/[^/]+\/turns$/.test(url.pathname)) fetches.push({ url, cacheControl: res.headers()["cache-control"] ?? "" });
+  });
+  return fetches;
+}
+
+test("with the stream blocked, the page polls and the debate still plays to the end; pushed pages share answers", async () => {
   const debateUrl = kim.url();
   await lev.route("**/api/debates/*/events", (route) => route.abort());
   await lev.goto(debateUrl);
   await lev.getByRole("button", { name: "Enter here" }).click();
+  const kimFetches = recordTurnsFetches(kim);
+  const levFetches = recordTurnsFetches(lev);
   // Lev's page can't open the stream: its lobby reloads every few seconds, its transcript polls.
   await kim.getByRole("button", { name: "Start debate" }).click();
   await expect(lev.getByText("Opening statements")).toBeVisible({ timeout: 15_000 });
   await expect(lev.getByText("Finished", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(kim.getByText("Finished", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+  // Polling always asks for comments too, and is never cached.
+  expect(levFetches.length).toBeGreaterThan(0);
+  for (const f of levFetches) {
+    expect(f.url.searchParams.has("commentsSince")).toBe(true);
+    expect(f.url.searchParams.has("v")).toBe(false);
+    expect(f.cacheControl).toBe("no-store");
+  }
+  // Pushed: the catch-up asks for comments (personal); fetches on events and at turn starts and
+  // ends carry a version and no comments, so the CDN may share them.
+  expect(kimFetches.some((f) => f.url.searchParams.has("commentsSince") && f.cacheControl === "no-store")).toBe(true);
+  const shared = kimFetches.filter((f) => f.url.searchParams.has("v"));
+  expect(shared.length).toBeGreaterThan(0);
+  for (const f of shared) {
+    expect(f.url.searchParams.has("commentsSince")).toBe(false);
+    expect(f.cacheControl).toBe("public, max-age=0, s-maxage=2");
+  }
 });

@@ -21,6 +21,8 @@ export const debates = sqliteTable(
     allowMultipleEntries: integer("allow_multiple_entries", { mode: "boolean" })
       .notNull()
       .default(false),
+    /** Viewers can chat beside the debate while it plays (the creator's choice; on by default). */
+    chatEnabled: integer("chat_enabled", { mode: "boolean" }).notNull().default(true),
     votingDuration: text("voting_duration", { enum: ["1h", "1d", "3d", "1w"] })
       .notNull()
       .default("3d"),

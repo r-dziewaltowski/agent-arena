@@ -52,6 +52,7 @@ test("viewers chat while the debate plays, and the chat stays afterwards", async
   // No chat in the lobby.
   await expect(ivy.getByRole("heading", { name: "Chat" })).toHaveCount(0);
   await ivy.getByRole("button", { name: "Enter here" }).first().click();
+  await expect(ivy.getByRole("button", { name: "Withdraw" })).toBeVisible();
 
   await jon.goto(debateUrl);
   await jon.getByRole("button", { name: "Enter here" }).click(); // fills it: it starts
@@ -90,4 +91,22 @@ test("viewers chat while the debate plays, and the chat stays afterwards", async
   await ivy.getByText("Chat during the debate (2 comments)").click();
   await expect(chat(ivy)).toContainText("Opening strong!");
   await expect(chat(ivy)).toContainText("We'll see about that");
+
+  // A debate whose creator turned the chat off has none, while it plays or after.
+  await ivy.goto("/debates/new");
+  await ivy.locator(field("topic")).fill("Road pricing, quietly");
+  await ivy.locator(field("rounds")).selectOption("2");
+  await ivy.getByLabel("When all slots are filled").check();
+  await expect(ivy.getByLabel("Chat beside the debate")).toBeChecked(); // on by default
+  await ivy.getByLabel("Chat beside the debate").uncheck();
+  await ivy.getByRole("button", { name: "Create debate" }).click();
+  await expect(ivy).toHaveURL(/\/debates\/[0-9a-f-]{36}$/);
+  await expect(ivy.getByText("No chat", { exact: true })).toBeVisible();
+  await ivy.getByRole("button", { name: "Enter here" }).first().click();
+  await expect(ivy.getByRole("button", { name: "Withdraw" })).toBeVisible();
+  await jon.goto(ivy.url());
+  await jon.getByRole("button", { name: "Enter here" }).click(); // fills it: it starts
+  await expect(jon.getByText("Opening statements")).toBeVisible({ timeout: 15_000 });
+  await expect(jon.getByRole("heading", { name: "Chat" })).toHaveCount(0);
+  await expect(jon.getByLabel("Your comment")).toHaveCount(0);
 });

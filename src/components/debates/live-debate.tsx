@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { Avatar } from "@/components/avatar";
 import { Notice, cx } from "@/components/ui";
 import { costUsd, formatUsd, type Price } from "@/lib/ai/pricing";
-import { revealDurationMs, revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
+import { revealedLength, SPEECH_PLAYBACK_RATE, wholeWords } from "@/lib/debate/pacing";
+import { eventAsk, nextFetch, POLL_MS, SPREAD_MS, type Ask, type LastMoment } from "@/lib/realtime/fetch-plan";
 import type { CommentView } from "@/lib/chat-shared";
 import type { TurnView, UpcomingTurn } from "@/lib/debate-view";
 import type { Side } from "@/lib/debate/sides";
@@ -47,28 +48,6 @@ const NAME_COLORS = ["text-indigo-700 dark:text-indigo-300", "text-emerald-700 d
 const LISTEN_KEY = "agent-arena:listen";
 /** How often a turn being shown is redrawn. */
 const TICK_MS = 50;
-/** Without pushed events: how often the turns are fetched. */
-const POLL_MS = 1_000;
-/** With pushed events: a fetch at least this often anyway, in case one was missed. */
-const SAFETY_FETCH_MS = 30_000;
-/** Viewers woken by the same event fetch at random within this window, not all in one instant. */
-const SPREAD_MS = 800;
-
-/**
- * With pushed events, when to fetch next: just after the next known moment (the upcoming turn
- * starts, or the one being shown ends; at the last one's end the page reloads), else the safety
- * fetch. A turn written live without pacing (the terminal CLI's setting) keeps polling.
- */
-function nextFetchIn(data: TurnsResponse, wordsPerSecond: number | null): number {
-  if (data.turns.some((t) => t.status === "streaming" && !t.reveal)) return POLL_MS;
-  const moments = data.turns.flatMap((t) =>
-    t.reveal ? [t.reveal.startsAt + revealDurationMs(t.reveal.full, wordsPerSecond ?? 4.5, t.reveal.marks)] : [],
-  );
-  if (data.upcoming) moments.push(data.upcoming.startsAt);
-  const soonest = Math.min(...moments) - data.serverNow;
-  if (!Number.isFinite(soonest)) return SAFETY_FETCH_MS;
-  return Math.min(SAFETY_FETCH_MS, Math.max(250, soonest + 100 + Math.random() * 500));
-}
 
 function roundTitle(round: number, rounds: number) {
   if (round === 1) return "Opening statements";
@@ -132,11 +111,11 @@ export function LiveDebate({
   const active = state.status === "running" || showing;
 
   // Pushed events: comments arrive whole; anything else means "fetch the turns".
-  const wakeRef = useRef<((spreadMs: number) => void) | null>(null);
+  const wakeRef = useRef<((ask: Ask) => void) | null>(null);
   const pushed = useDebateEvents(debateId, active, (event) => {
     if (event.type === "comment") feedRef.current?.merge([event.comment]);
     else if (event.type === "refresh") router.refresh();
-    else if (event.type === "turns") wakeRef.current?.(SPREAD_MS);
+    else if (event.type === "turns") wakeRef.current?.(eventAsk(event.at));
   });
 
   useEffect(() => {
@@ -144,31 +123,45 @@ export function LiveDebate({
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let inFlight = false;
-    let wokenMeanwhile = false;
-    const schedule = (ms: number) => {
+    let wokenWith: Ask | null = null;
+    let nextAsk: Ask = { personal: true };
+    let lastPersonalAt = serverTime();
+    let lastMoment: LastMoment = null;
+    const schedule = (ms: number, ask: Ask) => {
       clearTimeout(timer);
+      nextAsk = ask;
       if (!stopped) timer = setTimeout(poll, ms);
     };
     // An event during a fetch may not be in its answer: fetch again once it's back.
-    wakeRef.current = (spreadMs) => {
-      if (inFlight) wokenMeanwhile = true;
-      else schedule(Math.random() * spreadMs);
+    wakeRef.current = (ask) => {
+      if (inFlight) wokenWith = ask;
+      else schedule(Math.random() * SPREAD_MS, ask);
     };
 
     const poll = async () => {
       inFlight = true;
-      wokenMeanwhile = false;
-      let next = POLL_MS;
+      wokenWith = null;
+      // Polling (no stream) always asks for comments too; pushed, only the catch-up and safety fetches do.
+      const ask: Ask = pushed ? nextAsk : { personal: true };
+      let next: { delayMs: number; ask: Ask } = { delayMs: POLL_MS, ask: { personal: true } };
       const after = Math.max(0, ...turnsRef.current.filter((t) => t.status === "complete").map((t) => t.seq));
       try {
         const sentAt = Date.now();
-        const chat = feedRef.current ? `&commentsSince=${feedRef.current.cursor()}` : "";
-        const res = await fetch(`/api/debates/${debateId}/turns?after=${after}${chat}`, { cache: "no-store" });
+        let query = `after=${after}`;
+        if (!ask.personal) query += `&v=${ask.version}`;
+        else if (feedRef.current) query += `&commentsSince=${feedRef.current.cursor()}`;
+        const res = await fetch(`/api/debates/${debateId}/turns?${query}`, { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as TurnsResponse;
           if (stopped) return;
-          // The server's time was read about halfway through the request.
-          offsetRef.current = data.serverNow - (sentAt + Date.now()) / 2;
+          // A shared answer may come from the CDN, made up to a couple of seconds ago: only
+          // personal ones correct the clock and move the comments cursor.
+          if (ask.personal) {
+            // The server's time was read about halfway through the request.
+            offsetRef.current = data.serverNow - (sentAt + Date.now()) / 2;
+            lastPersonalAt = data.serverNow;
+            feedRef.current?.merge(data.comments ?? [], data.serverNow);
+          }
           setTurns((prev) => {
             // Drop our copies of turns still being shown; the response carries them.
             const bySeq = new Map(prev.filter((t) => t.status === "complete").map((t) => [t.seq, t]));
@@ -176,7 +169,6 @@ export function LiveDebate({
             return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
           });
           setUpcoming(data.upcoming);
-          feedRef.current?.merge(data.comments ?? [], data.serverNow);
           setState({
             status: data.status,
             waitingReason: data.waitingReason,
@@ -187,24 +179,31 @@ export function LiveDebate({
           });
           // Finished or failed, and every word shown: reload the page around the transcript (status, voting, etc.).
           if (data.status !== "running" && !data.upcoming && !data.turns.some((t) => t.status === "streaming")) router.refresh();
-          if (pushed) next = nextFetchIn(data, wordsPerSecond);
+          if (pushed) {
+            const plan = nextFetch(data, wordsPerSecond, serverTime(), lastPersonalAt, lastMoment);
+            lastMoment = plan.moment;
+            next = plan;
+          }
         }
       } catch {
-        // Network hiccup: try again on the next tick.
+        // Network hiccup: try again on the next tick, asking for everything.
       }
       inFlight = false;
-      schedule(wokenMeanwhile ? Math.random() * SPREAD_MS : next);
+      const woken: Ask | null = wokenWith;
+      if (woken) schedule(Math.random() * SPREAD_MS, woken);
+      else schedule(next.delayMs, next.ask);
     };
 
-    // Polling: every second. Pushed: catch up on what happened before the stream opened, then
-    // fetch only on events and at the moments already known (a turn starting or ending).
-    schedule(pushed ? 0 : POLL_MS);
+    // Polling: every second. Pushed: catch up (comments included) on what happened before the
+    // stream opened, then fetch on events and at the moments already known (a turn starting or
+    // ending), shared through the CDN, plus a personal fetch every 30 s.
+    schedule(pushed ? 0 : POLL_MS, { personal: true });
     return () => {
       stopped = true;
       clearTimeout(timer);
       wakeRef.current = null;
     };
-  }, [debateId, active, router, pushed, wordsPerSecond]);
+  }, [debateId, active, router, pushed, wordsPerSecond, serverTime]);
 
   // Redraw turns being shown a few times a second.
   const [now, setNow] = useState(() => serverNow);

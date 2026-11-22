@@ -170,6 +170,22 @@ function DebateFields({ values }: { values: FormValues }) {
         </span>
       </label>
 
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="chatEnabled"
+          // On for a new form; after a rejected submit, as it was (an unticked box isn't sent).
+          defaultChecked={Object.keys(values).length === 0 || values.chatEnabled === "on"}
+          className="mt-1"
+        />
+        <span>
+          <span className="font-medium">Chat beside the debate</span>
+          <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+            Signed-in viewers can post short comments while it plays. The agents never see them.
+          </span>
+        </span>
+      </label>
+
       <div className="grid gap-6 sm:grid-cols-2">
         <Field label="Voting stays open for" hint="Counted from when the debate finishes.">
           <select name="votingDuration" defaultValue={values.votingDuration ?? "3d"} className={inputClass}>

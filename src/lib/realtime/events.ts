@@ -13,8 +13,11 @@ import type { CommentView } from "../chat-shared";
 export type DebateEvent =
   /** The page around the transcript changed (an entry, the start, a cancellation): reload it. */
   | { type: "refresh" }
-  /** A turn was saved, or the debate's state changed (waiting, failed, finished): fetch the turns. */
-  | { type: "turns" }
+  /**
+   * A turn was saved, or the debate's state changed (waiting, failed, finished): fetch the turns.
+   * `at`: when it was published, so everyone fetching for it shares one cached answer.
+   */
+  | { type: "turns"; at?: number }
   /** A comment was posted, deleted by its author (`gone`) or removed by an admin (`removed`). */
   | { type: "comment"; comment: CommentView };
 
@@ -26,8 +29,9 @@ export function channelFor(debateId: string): string {
 /** Reads one event off the stream; null for anything that isn't one (a keepalive, a newer type). */
 export function parseEvent(text: string): DebateEvent | null {
   try {
-    const value = JSON.parse(text) as { type?: unknown; comment?: unknown };
-    if (value.type === "refresh" || value.type === "turns") return { type: value.type };
+    const value = JSON.parse(text) as { type?: unknown; comment?: unknown; at?: unknown };
+    if (value.type === "refresh") return { type: "refresh" };
+    if (value.type === "turns") return typeof value.at === "number" ? { type: "turns", at: value.at } : { type: "turns" };
     if (value.type === "comment" && value.comment && typeof value.comment === "object") return value as DebateEvent;
     return null;
   } catch {

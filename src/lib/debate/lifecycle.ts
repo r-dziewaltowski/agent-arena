@@ -100,6 +100,7 @@ export async function createDebate(
     startMode: v.startMode,
     startAt: v.startMode === "scheduled" ? v.startAt : null,
     allowMultipleEntries: v.allowMultipleEntries,
+    chatEnabled: v.chatEnabled,
     votingDuration: v.votingDuration,
     tallyVisibility: v.tallyVisibility,
     createdAt: now,

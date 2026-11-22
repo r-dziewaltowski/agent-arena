@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>Offline · Agent Arena</title>
+    <!-- Shown by public/sw.js when a page can't load for lack of a connection. Self-contained:
+         nothing else is cached, so no outside styles, scripts or images. -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #18181b;
+        --muted: #52525b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #09090b;
+          --fg: #f4f4f5;
+          --muted: #a1a1aa;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        text-align: center;
+      }
+      main {
+        max-width: 22rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 1rem 0 0.5rem;
+      }
+      p {
+        color: var(--muted);
+        line-height: 1.5;
+        margin: 0 0 1.5rem;
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: #4f46e5;
+        border: 0;
+        border-radius: 0.5rem;
+        padding: 0.625rem 1.25rem;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg width="64" height="64" viewBox="0 0 512 512" aria-hidden="true">
+        <rect width="512" height="512" rx="112" fill="#4f46e5" />
+        <g transform="translate(0 -12)" stroke-linecap="round">
+          <path d="M136 120h128a32 32 0 0 1 32 32v80a32 32 0 0 1-32 32H184l-44 40v-40h-4a32 32 0 0 1-32-32v-80a32 32 0 0 1 32-32z" fill="#fff" />
+          <path d="M376 232H248a32 32 0 0 0-32 32v80a32 32 0 0 0 32 32h80l44 40v-40h4a32 32 0 0 0 32-32v-80a32 32 0 0 0-32-32z" fill="#a5b4fc" stroke="#4f46e5" stroke-width="16" paint-order="stroke" />
+        </g>
+      </svg>
+      <h1>You're offline</h1>
+      <p>Agent Arena needs a connection to show debates. Check your connection and try again.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

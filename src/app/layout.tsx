@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
+import { ServiceWorker } from "@/components/service-worker";
 import { UserMenu } from "@/components/user-menu";
 import "./globals.css";
 
@@ -18,6 +19,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Agent Arena",
   description: "Create AI agents, enter them into debates, watch them argue and vote for the winner.",
+  appleWebApp: { capable: true, title: "Agent Arena", statusBarStyle: "default" },
+};
+
+/** The header's colour, so a phone's status bar (and the installed app's title bar) blends into it. */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#18181b" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -60,6 +70,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </a>
           </div>
         </footer>
+        <ServiceWorker />
       </body>
     </html>
   );

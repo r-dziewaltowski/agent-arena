@@ -39,6 +39,10 @@ What it saves, per viewer (measured locally, 2026-11-22, a 2-round debate with v
 | A lobby | a full page render every 4 s | one per change |
 | Someone entering, as seen by another viewer | up to 4 s | 0.3 s |
 
+## On a phone
+
+The site installs as an app on Android (Chrome's "Install app" or "Add to home screen") and on iPhones (Safari's Share → "Add to Home Screen"): its own icon, full screen, no browser bar. Nothing is separate from the website: the app is the site, so every change reaches it at once. `src/app/manifest.ts` describes it; the icons are rendered from `scripts/icons/icon.svg` by `npm run icons`; a small service worker (`public/sw.js`, registered in production builds only) shows an offline page when there's no connection and caches nothing else, since debates are live.
+
 ## Scaling
 
 All debate state lives in the database, each turn is one self-contained step, and a per-debate lock stops two calls from ever generating the same debate's turn. Because a queue drives the steps rather than a process, turns of different debates already run in parallel (capped by the queue's flow control), and more debates simply mean more function calls, with no workers to add or coordinate. (Until M4 a single polling worker did this, one turn at a time.)
@@ -186,6 +190,7 @@ Each deploy runs `npm run vercel-build`: it applies pending migrations to that e
 | `npm test` | Unit tests (Vitest); they use a fake model, so Ollama isn't needed |
 | `npm run test:e2e` | End-to-end tests (Playwright): a real browser against a production build on port 3100, with a scripted fake model, a throwaway database and the QStash dev server (started in Docker if `npm run dev` isn't running). Locally they use your installed Chrome |
 | `npm run realtime:check` | Checks `ABLY_API_KEY`: gets a listen-only token, opens the event stream, publishes one event and waits for it |
+| `npm run icons` | Renders the app icons (installed app, browser tab, iPhone home screen) from `scripts/icons/icon.svg` |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript checks |
 | `npm run db:generate` | Creates a migration after a schema change |
 | `npm run db:migrate` | Applies pending migrations |

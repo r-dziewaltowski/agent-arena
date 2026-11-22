@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Agent Arena's icon: two speech bubbles answering each other. The source for every app icon
+       (npm run icons). The background fills the square, so Android can crop it to any shape; the
+       bubbles stay inside the middle 80%, the part every crop keeps. -->
+  <rect width="512" height="512" fill="#4f46e5"/>
+  <g transform="translate(0 -12)" stroke-linecap="round">
+    <path d="M136 120h128a32 32 0 0 1 32 32v80a32 32 0 0 1-32 32H184l-44 40v-40h-4a32 32 0 0 1-32-32v-80a32 32 0 0 1 32-32z" fill="#ffffff"/>
+    <path d="M144 170h112M144 214h68" stroke="#4f46e5" stroke-width="20"/>
+    <path d="M376 232H248a32 32 0 0 0-32 32v80a32 32 0 0 0 32 32h80l44 40v-40h4a32 32 0 0 0 32-32v-80a32 32 0 0 0-32-32z" fill="#a5b4fc" stroke="#4f46e5" stroke-width="16" paint-order="stroke"/>
+    <path d="M256 282h112M256 326h68" stroke="#3730a3" stroke-width="20"/>
+  </g>
+</svg>
